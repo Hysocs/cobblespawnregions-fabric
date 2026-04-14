@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "com.cobblespawnregions.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+      "RegionSpawnDisableMixin",
+      "RegionEntitySpawnMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

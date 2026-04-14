@@ -1,0 +1,44 @@
+{
+	"schemaVersion": 1,
+	"id": "cobblespawnregions",
+	"version": "${version}",
+	"name": "CobbleSpawnRegions",
+	"description": "This mod allows you to claim and set regions for cobblemon to spawn",
+    "authors": [
+      "Hysocs"
+    ],
+    "contact": {
+      "discord": "https://discord.gg/KQyPEye7CT"
+    },
+    "license": "GNU Lesser General Public License v3",
+	"icon": "assets/cobblespawnregions/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "com.cobblespawnregions.CobbleSpawnRegions",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "com.cobblespawnregions.client.CobbleSpawnRegionsClient",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"cobblespawnregions.mixins.json",
+		{
+			"config": "cobblespawnregions.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.6",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	}
+}
