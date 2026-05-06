@@ -1,7 +1,10 @@
 package com.cobblespawnregions
 
+import com.cobblemon.mod.common.entity.pokemon.PokemonEntity
 import com.cobblespawnregions.utils.RegionCommands
+import com.cobblespawnregions.utils.RegionEntityTracker
 import com.cobblespawnregions.utils.RegionParticleUtils
+import com.cobblespawnregions.utils.RegionSpawnHelper
 import com.cobblespawnregions.utils.RegionsConfig
 import com.cobblespawnregions.utils.SpawnPointScanner
 import com.cobblespawnregions.utils.SpawnPointStore
@@ -9,18 +12,24 @@ import com.everlastingutils.scheduling.SchedulerManager
 import com.everlastingutils.utils.logDebug
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.minecraft.component.DataComponentTypes
+import net.minecraft.entity.Entity
+import net.minecraft.registry.RegistryKey
+import net.minecraft.registry.RegistryKeys
+import net.minecraft.server.MinecraftServer
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.server.world.ServerWorld
 import net.minecraft.text.Text
 import net.minecraft.util.ActionResult
 import net.minecraft.util.Hand
+import net.minecraft.util.Identifier
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.ChunkPos
+import net.minecraft.world.World
 import org.slf4j.LoggerFactory
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -48,7 +57,6 @@ object CobbleSpawnRegions : ModInitializer {
     val playerSelections = ConcurrentHashMap<UUID, PlayerSelection>()
     val activeVisualizations = ConcurrentHashMap<UUID, String>()
 
-
     @Volatile private var serverReady = false
 
     override fun onInitialize() {
@@ -65,6 +73,18 @@ object CobbleSpawnRegions : ModInitializer {
             serverReady = true
             SpawnPointScanner.enqueueAllLoadedChunks(server)
 
+            // ── Rebuild entity tracker from already-loaded entities ────────────
+            // Covers entities that were alive before this server session started.
+            for (region in RegionsConfig.regions.values) {
+                val rWorld = server.getWorld(parseDimension(region.dimension)) ?: continue
+                val box    = RegionSpawnHelper.regionBoundingBox(region)
+                RegionEntityTracker.rebuildFromWorld(rWorld, region.regionId, box)
+                logger.info(
+                    "[CSR] Tracker rebuilt for '${region.regionId}': " +
+                            "${RegionEntityTracker.countTotal(region.regionId)} entity/ies tracked."
+                )
+            }
+
             SchedulerManager.scheduleAtFixedRate(
                 "cobblespawnregions-particle-loop",
                 server, 0L, 500L, TimeUnit.MILLISECONDS
@@ -78,6 +98,13 @@ object CobbleSpawnRegions : ModInitializer {
             ) {
                 SpawnPointScanner.processPendingScans(count = 2)
             }
+
+            SchedulerManager.scheduleAtFixedRate(
+                "cobblespawnregions-spawn-loop",
+                server, 0L, 1L, TimeUnit.SECONDS
+            ) {
+                processAllRegionSpawns(server)
+            }
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { _ ->
@@ -85,9 +112,11 @@ object CobbleSpawnRegions : ModInitializer {
             SpawnPointScanner.clearQueue()
             SchedulerManager.shutdown("cobblespawnregions-particle-loop")
             SchedulerManager.shutdown("cobblespawnregions-scan-loop")
+            SchedulerManager.shutdown("cobblespawnregions-spawn-loop")
             playerSelections.clear()
             activeVisualizations.clear()
             SpawnPointStore.clearAll()
+            RegionEntityTracker.clearAll()
         }
 
         ServerChunkEvents.CHUNK_LOAD.register { world, chunk ->
@@ -109,11 +138,67 @@ object CobbleSpawnRegions : ModInitializer {
                 if (chunkPos.z < rMinCZ || chunkPos.z > rMaxCZ) return@forEach
 
                 SpawnPointScanner.enqueueScan(region.regionId, region, chunkPos, world)
+
+                // Re-populate tracker with entities returning from hibernation
+                val box = RegionSpawnHelper.regionBoundingBox(region)
+                RegionEntityTracker.rebuildFromWorld(world, region.regionId, box)
+            }
+        }
+
+        // ── Entity removal listener ────────────────────────────────────────────
+        // Untrack our Pokémon when they are genuinely removed (killed, despawned,
+        // changed dimension) — but NOT when their chunk is merely unloaded.
+        ServerEntityEvents.ENTITY_UNLOAD.register { entity, _ ->
+            if (entity !is PokemonEntity) return@register
+            val reason = entity.removalReason ?: return@register
+            when (reason) {
+                Entity.RemovalReason.UNLOADED_TO_CHUNK,
+                Entity.RemovalReason.UNLOADED_WITH_PLAYER -> {
+                    // Entity is hibernating, not dead — leave it in the tracker.
+                }
+                else -> {
+                    // KILLED, DISCARDED, CHANGED_DIMENSION, etc.
+                    val wasTracked = entity.pokemon.persistentData.contains("csr_region")
+                    RegionEntityTracker.untrack(entity.uuid)
+                    if (wasTracked) {
+                        logDebug(
+                            "Untracked ${entity.uuid} (reason=${reason.name}, " +
+                                    "species=${entity.pokemon.species.name})", MOD_ID
+                        )
+                    }
+                }
             }
         }
 
         registerInteractionEvents()
     }
+
+    // ── Spawn driver ──────────────────────────────────────────────────────────
+
+    private fun processAllRegionSpawns(server: MinecraftServer) {
+        for (region in RegionsConfig.regions.values) {
+            if (region.selectedPokemon.isEmpty()) continue
+            if (!RegionSpawnHelper.isSpawnReady(region.regionId)) continue
+
+            val world = server.getWorld(parseDimension(region.dimension)) ?: continue
+            try {
+                RegionSpawnHelper.attemptSpawnInRegion(world, region.regionId)
+            } catch (e: Exception) {
+                logger.error("Error spawning for region '${region.regionId}'", e)
+            }
+        }
+    }
+
+    private fun parseDimension(str: String): RegistryKey<World> {
+        val parts = str.split(":")
+        if (parts.size != 2) {
+            logger.warn("Invalid dimension '$str', using 'minecraft:overworld'")
+            return RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"))
+        }
+        return RegistryKey.of(RegistryKeys.WORLD, Identifier.of(parts[0], parts[1]))
+    }
+
+    // ── Stick interactions ───────────────────────────────────────────────────
 
     private fun registerInteractionEvents() {
 
