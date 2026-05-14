@@ -9,6 +9,7 @@ import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
+import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 import java.util.concurrent.ConcurrentHashMap
 
@@ -41,21 +42,27 @@ object RegionListGui {
 
     private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity) {
         val page = playerPages[player] ?: 0
-        val regions = RegionsConfig.regions.values.toList()
+        val regions = RegionsConfig.regionsInPriorityOrder()
 
         when (ctx.slotIndex) {
             Slots.PREV -> if (page > 0) open(player, page - 1)
             Slots.NEXT -> if ((page + 1) * PAGE_SIZE < regions.size) open(player, page + 1)
             in 0 until PAGE_SIZE -> {
                 val idx = page * PAGE_SIZE + ctx.slotIndex
-                if (idx < regions.size) RegionEditorGui.open(player, regions[idx].regionId)
+                if (idx < regions.size) {
+                    val regionId = regions[idx].regionId
+                    when (ctx.clickType) {
+                        ClickType.RIGHT -> RegionDeleteGui.open(player, regionId, page)
+                        else -> RegionEditorGui.open(player, regionId)
+                    }
+                }
             }
         }
     }
 
     private fun buildLayout(page: Int): List<ItemStack> {
         val layout = MutableList(54) { filler() }
-        val regions = RegionsConfig.regions.values.toList()
+        val regions = RegionsConfig.regionsInPriorityOrder()
         val start = page * PAGE_SIZE
         val end   = minOf(start + PAGE_SIZE, regions.size)
 
@@ -70,7 +77,6 @@ object RegionListGui {
     }
 
     private fun regionItem(r: RegionData): ItemStack {
-        val subs = r.subRegions.size
         val restr = r.spawnRestrictions
         return CustomGui.createPlayerHeadButton(
             "region_${r.regionId}",
@@ -78,10 +84,13 @@ object RegionListGui {
             listOf(
                 Text.literal("§8${r.regionId}  [${r.mode}]"),
                 Text.literal("§7Dimension: §f${r.dimension}"),
-                Text.literal("§7Sub-regions: §f$subs"),
+                Text.literal("§7Priority: §f${r.priority}"),
+                Text.literal("§8Higher priority controls overlaps."),
                 Text.literal("§7Disable All: ${flag(restr.disableAll)}"),
+                Text.literal("§7Custom Spawns: §f${r.selectedPokemon.size}"),
                 Text.literal(""),
-                Text.literal("§eClick §7to edit")
+                Text.literal("§eLeft-click §7to edit"),
+                Text.literal("§cRight-click §7to delete")
             ),
             Textures.REGION
         )

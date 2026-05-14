@@ -3,6 +3,7 @@
 	"package": "com.cobblespawnregions.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
+      "MobEntityAccessor",
       "RegionSpawnDisableMixin",
       "RegionEntitySpawnMixin"
 	],

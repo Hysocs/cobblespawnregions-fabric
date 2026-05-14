@@ -8,14 +8,7 @@ object RegionExclusionHelper {
     // ── Region lookup ─────────────────────────────────────────────────────────
 
     fun getApplicableRestriction(pos: BlockPos, dimension: String): RegionRestrictionConfig? {
-        for (region in RegionsConfig.regions.values) {
-            if (region.dimension != dimension) continue
-            if (!pos.isInBounds(region.pos1, region.pos2)) continue
-
-            val matchingSub = region.subRegions.firstOrNull { pos.isInBounds(it.pos1, it.pos2) }
-            return matchingSub?.spawnRestrictions ?: region.spawnRestrictions
-        }
-        return null
+        return RegionsConfig.controllingRegionAt(pos, dimension)?.spawnRestrictions
     }
 
     fun isSpawnDisabledAt(pos: BlockPos, dimension: String): Boolean {
@@ -90,12 +83,4 @@ object RegionExclusionHelper {
         }
     }
 
-    // ── Internal helpers ──────────────────────────────────────────────────────
-
-    private fun BlockPos.isInBounds(p1: SerializableBlockPos, p2: SerializableBlockPos): Boolean {
-        val minX = minOf(p1.x, p2.x); val maxX = maxOf(p1.x, p2.x)
-        val minY = minOf(p1.y, p2.y); val maxY = maxOf(p1.y, p2.y)
-        val minZ = minOf(p1.z, p2.z); val maxZ = maxOf(p1.z, p2.z)
-        return x in minX..maxX && y in minY..maxY && z in minZ..maxZ
-    }
 }

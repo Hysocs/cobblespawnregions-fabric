@@ -7,88 +7,92 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Tracks UUIDs of every Pokémon spawned by CobbleSpawnRegions.
+ * Tracks every Pokemon spawned by CobbleSpawnRegions.
  *
- * Entities are tagged on spawn via [com.cobblemon.mod.common.pokemon.Pokemon.persistentData]:
- *   "csr_region"    → regionId  (String)
- *   "csr_entry_key" → entryKey  (String) — see [entryKey]
- *
- * That data survives chunk unloads and server restarts, so we can
- * [rebuildFromWorld] whenever a chunk comes back into memory.
+ * Counts use csr_spawn_id, not the Minecraft entity UUID. UUIDs are only live
+ * handles, so a chunk unload/reload cannot make the region forget a still
+ * existing spawn or count a recreated entity twice.
  */
 object RegionEntityTracker {
 
-    // regionId → entryKey → live UUID set
-    private val tracked = ConcurrentHashMap<String, ConcurrentHashMap<String, MutableSet<UUID>>>()
-    // uuid → (regionId, entryKey) — O(1) reverse-lookup on removal
-    private val reverseMap = ConcurrentHashMap<UUID, Pair<String, String>>()
+    const val REGION_KEY = "csr_region"
+    const val ENTRY_KEY = "csr_entry_key"
+    const val SPAWN_ID_KEY = "csr_spawn_id"
+    const val SPAWNED_AT_MS_KEY = "csr_spawned_at_ms"
+    const val SPAWNED_AT_WORLD_TIME_KEY = "csr_spawned_at_world_time"
+    const val DIMENSION_KEY = "csr_dimension"
 
-    // ── Key helpers ───────────────────────────────────────────────────────────
+    data class TrackedSpawn(
+        val regionId: String,
+        val entryKey: String,
+        val spawnId: String
+    )
 
-    /**
-     * Canonical, deterministic key for a [PokemonSpawnEntry].
-     * Written into [com.cobblemon.mod.common.pokemon.Pokemon.persistentData]
-     * so loaded entities can be matched back to the right counter.
-     */
+    private val tracked = ConcurrentHashMap<String, ConcurrentHashMap<String, MutableSet<String>>>()
+    private val liveUuidMap = ConcurrentHashMap<UUID, TrackedSpawn>()
+
     fun entryKey(entry: PokemonSpawnEntry): String {
         val aspects = entry.aspects.map { it.lowercase() }.sorted().joinToString(",")
-        val form    = entry.formName?.lowercase() ?: ""
+        val form = entry.formName?.lowercase() ?: ""
         return "${entry.pokemonName.lowercase()}|$form|$aspects"
     }
 
-    // ── Mutation ──────────────────────────────────────────────────────────────
-
-    /** Register a freshly-spawned entity with the tracker. */
-    fun track(regionId: String, entryKey: String, uuid: UUID) {
+    fun track(regionId: String, entryKey: String, spawnId: String, uuid: UUID) {
         tracked
             .getOrPut(regionId) { ConcurrentHashMap() }
             .getOrPut(entryKey) { ConcurrentHashMap.newKeySet() }
-            .add(uuid)
-        reverseMap[uuid] = regionId to entryKey
+            .add(spawnId)
+        liveUuidMap[uuid] = TrackedSpawn(regionId, entryKey, spawnId)
     }
 
-    /**
-     * Remove a UUID when the entity is *actually* gone (killed, discarded, or
-     * dimension-changed). Do **not** call this on a plain chunk-unload — the
-     * entity still exists, just hibernated.
-     */
+    fun trackLoadedEntity(entity: PokemonEntity): Boolean {
+        val data = entity.pokemon.persistentData
+        val regionId = data.getString(REGION_KEY)
+        val entryKey = data.getString(ENTRY_KEY)
+        if (regionId.isEmpty() || entryKey.isEmpty()) return false
+
+        var spawnId = data.getString(SPAWN_ID_KEY)
+        if (spawnId.isEmpty()) {
+            spawnId = "legacy-${entity.uuid}"
+            data.putString(SPAWN_ID_KEY, spawnId)
+        }
+        if (!data.contains(SPAWNED_AT_MS_KEY)) {
+            data.putLong(SPAWNED_AT_MS_KEY, System.currentTimeMillis())
+        }
+
+        track(regionId, entryKey, spawnId, entity.uuid)
+        RegionWanderingGoalManager.attachIfConfigured(entity)
+        return true
+    }
+
     fun untrack(uuid: UUID) {
-        val (regionId, entryKey) = reverseMap.remove(uuid) ?: return
-        tracked[regionId]?.get(entryKey)?.remove(uuid)
+        val trackedSpawn = liveUuidMap.remove(uuid) ?: return
+        tracked[trackedSpawn.regionId]?.get(trackedSpawn.entryKey)?.remove(trackedSpawn.spawnId)
     }
 
-    // ── Queries ───────────────────────────────────────────────────────────────
+    fun forgetLiveUuid(uuid: UUID) {
+        liveUuidMap.remove(uuid)
+    }
 
-    /** Count of tracked (possibly unloaded) entities for one entry in a region. */
     fun countForEntry(regionId: String, entryKey: String): Int =
         tracked[regionId]?.get(entryKey)?.size ?: 0
 
-    /** Total count of all tracked entries in a region. */
     fun countTotal(regionId: String): Int =
         tracked[regionId]?.values?.sumOf { it.size } ?: 0
 
-    // ── World rebuild ─────────────────────────────────────────────────────────
+    fun isManaged(entity: PokemonEntity): Boolean =
+        entity.pokemon.persistentData.getString(REGION_KEY).isNotEmpty()
 
-    /**
-     * Scans currently-loaded [PokemonEntity] instances inside [regionBox] for
-     * ones tagged with [regionId] and registers any that aren't already known.
-     *
-     * Call on:
-     *  - `SERVER_STARTED` (covers already-loaded chunks after a restart)
-     *  - `CHUNK_LOAD`     (picks up entities as their chunk comes back)
-     */
     fun rebuildFromWorld(world: ServerWorld, regionId: String, regionBox: Box) {
         world.getEntitiesByClass(PokemonEntity::class.java, regionBox) { entity ->
-            entity.pokemon.persistentData.getString("csr_region") == regionId
+            entity.pokemon.persistentData.getString(REGION_KEY) == regionId
         }.forEach { entity ->
-            if (reverseMap.containsKey(entity.uuid)) return@forEach   // already known
-            val eKey = entity.pokemon.persistentData.getString("csr_entry_key")
-            if (eKey.isNotEmpty()) track(regionId, eKey, entity.uuid)
+            trackLoadedEntity(entity)
         }
     }
 
     fun clearAll() {
         tracked.clear()
-        reverseMap.clear()
+        liveUuidMap.clear()
     }
 }

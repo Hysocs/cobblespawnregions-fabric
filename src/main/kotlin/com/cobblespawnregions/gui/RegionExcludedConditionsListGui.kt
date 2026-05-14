@@ -37,40 +37,40 @@ object RegionExcludedConditionsListGui {
         const val ENTRY = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmViNTg4YjIxYTZmOThhZDFmZjRlMDg1YzU1MmRjYjA1MGVmYzljYWI0MjdmNDcyNjkwOTYxMjg5N2I5Zjk3In19fQ=="
     }
 
-    fun open(player: ServerPlayerEntity, regionId: String, subRegionId: String?, page: Int = 0) {
+    fun open(player: ServerPlayerEntity, regionId: String, page: Int = 0) {
         playerPages[player] = page
-        val label = RegionsConfig.scopeLabel(regionId, subRegionId)
+        val label = RegionsConfig.scopeLabel(regionId)
 
         CustomGui.openGui(
             player,
             "Excluded Conditions — $label",
-            buildLayout(player, regionId, subRegionId),
-            { ctx -> handleClick(ctx, player, regionId, subRegionId) },
+            buildLayout(player, regionId),
+            { ctx -> handleClick(ctx, player, regionId) },
             {}
         )
     }
 
-    private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
-        val restr = RegionsConfig.getRestriction(regionId, subRegionId) ?: return
+    private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String) {
+        val restr = RegionsConfig.getRestriction(regionId) ?: return
         val conditions = restr.exclusionConditions
         val page = playerPages[player] ?: 0
 
         when (ctx.slotIndex) {
             Slots.PREV -> if (page > 0) {
                 playerPages[player] = page - 1
-                refresh(player, regionId, subRegionId)
+                refresh(player, regionId)
             }
             Slots.NEXT -> if ((page + 1) * PAGE_SIZE < conditions.size) {
                 playerPages[player] = page + 1
-                refresh(player, regionId, subRegionId)
+                refresh(player, regionId)
             }
-            Slots.BACK -> RegionConditionScannerGui.open(player, regionId, subRegionId)
+            Slots.BACK -> RegionConditionScannerGui.open(player, regionId)
             in 0 until PAGE_SIZE -> {
                 val idx = page * PAGE_SIZE + ctx.slotIndex
                 if (idx < conditions.size) {
                     val condition = conditions[idx]
                     if (condition is String) {                                    // ← FIX: safe cast
-                        removeCondition(restr, regionId, condition, player, subRegionId)
+                        removeCondition(restr, regionId, condition, player)
                     }
                 }
             }
@@ -82,21 +82,20 @@ object RegionExcludedConditionsListGui {
         restr: RegionRestrictionConfig,
         regionId: String,
         condition: String,
-        player: ServerPlayerEntity,
-        subRegionId: String?
+        player: ServerPlayerEntity
     ) {
         restr.exclusionConditions.remove(condition)
         RegionsConfig.saveRegion(regionId)
-        refresh(player, regionId, subRegionId)
+        refresh(player, regionId)
     }
 
-    private fun refresh(player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
-        CustomGui.refreshGui(player, buildLayout(player, regionId, subRegionId))
+    private fun refresh(player: ServerPlayerEntity, regionId: String) {
+        CustomGui.refreshGui(player, buildLayout(player, regionId))
     }
 
-    private fun buildLayout(player: ServerPlayerEntity, regionId: String, subRegionId: String?): List<ItemStack> {
+    private fun buildLayout(player: ServerPlayerEntity, regionId: String): List<ItemStack> {
         val layout = MutableList(54) { filler() }
-        val restr  = RegionsConfig.getRestriction(regionId, subRegionId) ?: return layout
+        val restr  = RegionsConfig.getRestriction(regionId) ?: return layout
         val page   = playerPages[player] ?: 0
         val conditions = restr.exclusionConditions
 

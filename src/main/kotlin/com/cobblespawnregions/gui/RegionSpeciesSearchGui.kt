@@ -16,8 +16,8 @@ import net.minecraft.text.Text
  *   Right slot = blocked input (glass pane)
  *   Result     = dynamic search button that confirms on click
  *
- * On confirm or cancel, returns to [RegionSpeciesBlocklistGui] with the
- * correct [regionId] / [subRegionId] scope preserved.
+ * On confirm or cancel, returns to [RegionSpeciesBlocklistGui] for the
+ * current [regionId].
  */
 object RegionSpeciesSearchGui {
 
@@ -26,8 +26,8 @@ object RegionSpeciesSearchGui {
         const val SEARCH = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTY4M2RjN2JjNmRiZGI1ZGM0MzFmYmUyOGRjNGI5YWU2MjViOWU1MzE3YTI5ZjJjNGVjZmU3YmY1YWU1NmMzOCJ9fX0="
     }
 
-    fun open(player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
-        val guiId = "csr_species_search_${regionId}_${subRegionId ?: "main"}"
+    fun open(player: ServerPlayerEntity, regionId: String) {
+        val guiId = "csr_species_search_$regionId"
 
         AnvilGuiManager.openAnvilGui(
             player       = player,
@@ -40,7 +40,7 @@ object RegionSpeciesSearchGui {
 
             onLeftClick  = {
                 // Cancel — return without changing the search term
-                goBack(player, regionId, subRegionId)
+                goBack(player, regionId)
             },
 
             onRightClick = null,
@@ -50,7 +50,7 @@ object RegionSpeciesSearchGui {
                 if (text.isNotBlank()) {
                     RegionSpeciesBlocklistGui.applySearch(player, text)
                 }
-                goBack(player, regionId, subRegionId)
+                goBack(player, regionId)
             },
 
             onTextChange = { text ->
@@ -62,7 +62,7 @@ object RegionSpeciesSearchGui {
                 // Guard against double-open: only navigate back if no other GUI is already open
                 player.server.execute {
                     if (player.currentScreenHandler !is FullyModularAnvilScreenHandler) {
-                        goBack(player, regionId, subRegionId)
+                        goBack(player, regionId)
                     }
                 }
             }
@@ -77,9 +77,9 @@ object RegionSpeciesSearchGui {
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
-    private fun goBack(player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
+    private fun goBack(player: ServerPlayerEntity, regionId: String) {
         player.server.execute {
-            RegionSpeciesBlocklistGui.open(player, regionId, subRegionId, page = 0)
+            RegionSpeciesBlocklistGui.open(player, regionId, page = 0)
         }
     }
 

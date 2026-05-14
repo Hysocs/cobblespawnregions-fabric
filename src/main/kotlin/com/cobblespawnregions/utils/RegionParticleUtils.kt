@@ -63,15 +63,24 @@ object RegionParticleUtils {
                 buildSelectionRequests(player, sel, requests)
             }
 
-            val regionId = CobbleSpawnRegions.activeVisualizations[player.uuid]
-            if (regionId != null) {
-                val region = RegionsConfig.getRegion(regionId)
-                if (region != null) {
-                    playersToUpdate.add(player.uuid)
-                    buildRegionRequests(player, region, requests)
-                    spawnPointParticles(player, regionId)
-                } else {
+            val regionIds = CobbleSpawnRegions.activeVisualizations[player.uuid]
+            if (regionIds != null) {
+                val missing = mutableListOf<String>()
+                regionIds.forEach { regionId ->
+                    val region = RegionsConfig.getRegion(regionId)
+                    if (region != null) {
+                        playersToUpdate.add(player.uuid)
+                        buildRegionRequests(player, region, requests)
+                        spawnPointParticles(player, regionId)
+                    } else {
+                        missing.add(regionId)
+                    }
+                }
+                missing.forEach { regionIds.remove(it) }
+                if (regionIds.isEmpty()) {
                     CobbleSpawnRegions.activeVisualizations.remove(player.uuid)
+                } else {
+                    playersToUpdate.add(player.uuid)
                 }
             }
 
@@ -171,9 +180,12 @@ object RegionParticleUtils {
      *   WATER → BUBBLE (blue)           – single at the water block
      */
     private fun spawnPointParticles(player: ServerPlayerEntity, regionId: String) {
+        val region = RegionsConfig.getRegion(regionId) ?: return
         val px = player.x; val py = player.y; val pz = player.z
 
         SpawnPointStore.forEach(regionId) { pos, _, type ->
+            if (!RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) return@forEach
+
             val fx = pos.x + 0.5
             val fy = pos.y + 0.5
             val fz = pos.z + 0.5
@@ -181,10 +193,7 @@ object RegionParticleUtils {
             if (dx * dx + dy * dy + dz * dz > SPAWN_PARTICLE_RADIUS_SQ) return@forEach
 
             when (type) {
-                SpawnType.SOLID -> {
-                    sendParticle(player, ParticleTypes.HAPPY_VILLAGER, fx, fy,       fz)
-                    sendParticle(player, ParticleTypes.HAPPY_VILLAGER, fx, fy + 1.0, fz)
-                }
+                SpawnType.SOLID -> sendParticle(player, ParticleTypes.HAPPY_VILLAGER, fx, fy, fz)
                 SpawnType.AIR   -> sendParticle(player, ParticleTypes.END_ROD, fx, fy, fz)
                 SpawnType.WATER -> sendParticle(player, ParticleTypes.BUBBLE,  fx, fy, fz)
             }
@@ -267,13 +276,12 @@ object RegionParticleUtils {
         requests: MutableList<BoxRequest>
     ) {
         when (sel.mode) {
-            StickMode.COORDS, StickMode.SUB_REGION -> {
+            StickMode.COORDS -> {
                 val p1 = sel.pos1
                 val p2 = sel.pos2
-                val isSub = sel.mode == StickMode.SUB_REGION
 
-                val faceBlock  = if (isSub) Blocks.MAGENTA_STAINED_GLASS.defaultState else Blocks.ORANGE_STAINED_GLASS.defaultState
-                val frameBlock = if (isSub) Blocks.MAGENTA_CONCRETE.defaultState      else Blocks.ORANGE_CONCRETE.defaultState
+                val faceBlock  = Blocks.ORANGE_STAINED_GLASS.defaultState
+                val frameBlock = Blocks.ORANGE_CONCRETE.defaultState
                 val edgeBlock  = Blocks.RED_CONCRETE.defaultState
 
                 if (p1 != null && p2 != null) {
@@ -328,16 +336,5 @@ object RegionParticleUtils {
         drawHollowBox(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, Blocks.LIME_STAINED_GLASS.defaultState, Blocks.LIME_CONCRETE.defaultState, requests)
         drawWireframeEdges(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, Blocks.RED_CONCRETE.defaultState, requests = requests)
 
-        region.subRegions.forEach { sub ->
-            val sMinX = minOf(sub.pos1.x, sub.pos2.x).toDouble()
-            val sMinY = minOf(sub.pos1.y, sub.pos2.y).toDouble()
-            val sMinZ = minOf(sub.pos1.z, sub.pos2.z).toDouble()
-            val sMaxX = maxOf(sub.pos1.x, sub.pos2.x).toDouble() + 1.0
-            val sMaxY = maxOf(sub.pos1.y, sub.pos2.y).toDouble() + 1.0
-            val sMaxZ = maxOf(sub.pos1.z, sub.pos2.z).toDouble() + 1.0
-
-            drawHollowBox(sMinX, sMinY, sMinZ, sMaxX, sMaxY, sMaxZ, Blocks.LIGHT_BLUE_STAINED_GLASS.defaultState, Blocks.LIGHT_BLUE_CONCRETE.defaultState, requests)
-            drawWireframeEdges(sMinX, sMinY, sMinZ, sMaxX, sMaxY, sMaxZ, Blocks.RED_CONCRETE.defaultState, requests = requests)
-        }
     }
 }

@@ -1,7 +1,7 @@
 package com.cobblespawnregions.gui
 
+import com.cobblespawnregions.utils.RegionData
 import com.cobblespawnregions.utils.RegionsConfig
-import com.cobblespawnregions.utils.SubRegionData
 import com.everlastingutils.gui.CustomGui
 import com.everlastingutils.gui.InteractionContext
 import com.everlastingutils.gui.setCustomName
@@ -9,129 +9,187 @@ import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
+import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 
 /**
- * Region overview GUI.
- *
- * Layout:
- *   Row 0  : cyan glass bar — slot 4 opens the MAIN REGION settings hub.
- *   Rows 1-4: sub-regions — each one is clickable and opens the SUB-REGION
- *             settings hub for that specific sub. They share the same GUI
- *             stack; only the scope (subRegionId) differs.
- *   Row 5  : filler + back button (slot 49).
+ * Top-level editor for one priority region.
+ * Detailed natural and custom-spawn settings live in their own screens.
  */
 object RegionEditorGui {
 
-    private const val REGION_SETTINGS_SLOT = 4
-    private const val BACK_SLOT            = 49
-    private const val SUB_REGION_START     = 9
-    private const val SUB_REGION_END       = 44
+    private object Slots {
+        const val SUMMARY = 4
+
+        const val PRIORITY = 22
+
+        const val NATURAL = 30
+        const val CUSTOM = 32
+
+        const val BACK = 49
+    }
+
+    private object Limits {
+        const val MIN_PRIORITY = -1_000
+        const val MAX_PRIORITY = 1_000
+    }
 
     private object Textures {
-        const val SETTINGS = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTdiMjE4OTMwMGYzMzliYTA1MGUwMWFlMmE1NDBiN2U4OWVmODk2YTU1Yzc5MTZkY2M5ZTU4NTFhZjg2NDExZSJ9fX0="
-        const val BACK     = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
-        const val SUB      = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
+        const val REGION = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
+        const val NATURAL = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTdiMjE4OTMwMGYzMzliYTA1MGUwMWFlMmE1NDBiN2U4OWVmODk2YTU1Yzc5MTZkY2M5ZTU4NTFhZjg2NDExZSJ9fX0="
+        const val CUSTOM = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
+        const val BACK = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
     }
 
     fun open(player: ServerPlayerEntity, regionId: String) {
         val region = RegionsConfig.getRegion(regionId) ?: run {
-            player.sendMessage(Text.literal("§c[CSR] Region '$regionId' not found."), false)
+            player.sendMessage(Text.literal("Â§c[CSR] Region '$regionId' not found."), false)
             return
         }
         CustomGui.openGui(
             player,
-            "Region: ${region.regionName}",
-            buildLayout(regionId),
-            { ctx -> handleClick(ctx, player, regionId) },
+            "Region - ${region.regionName}",
+            buildLayout(region),
+            { ctx -> handleClick(ctx, player, region.regionId) },
             {}
         )
     }
 
     private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String) {
-        val region = RegionsConfig.getRegion(regionId) ?: return
-
         when (ctx.slotIndex) {
-            // Main region settings hub (subRegionId = null)
-            REGION_SETTINGS_SLOT -> RegionSettingsGui.open(player, regionId, subRegionId = null)
-
-            // Back to the region list
-            BACK_SLOT -> RegionListGui.open(player)
-
-            // Sub-region slots → settings hub scoped to that sub
-            in SUB_REGION_START..SUB_REGION_END -> {
-                val idx = ctx.slotIndex - SUB_REGION_START
-                val sub = region.subRegions.getOrNull(idx) ?: return
-                RegionSettingsGui.open(player, regionId, subRegionId = sub.subRegionId)
+            Slots.PRIORITY -> {
+                val delta = if (ctx.clickType == ClickType.RIGHT) -1 else 1
+                adjustPriority(player, regionId, delta)
             }
+
+            Slots.NATURAL -> RegionNaturalSpawnGui.open(player, regionId)
+            Slots.CUSTOM -> RegionUnnaturalSpawnGui.open(player, regionId)
+
+            Slots.BACK -> RegionListGui.open(player)
         }
     }
 
-    private fun buildLayout(regionId: String): List<ItemStack> {
+    private fun buildLayout(region: RegionData): List<ItemStack> {
         val layout = MutableList(54) { filler() }
-        val region = RegionsConfig.getRegion(regionId) ?: return layout
-
-        // Row 0 — cyan glass + main region settings button
         for (i in 0..8) layout[i] = glass()
-        layout[REGION_SETTINGS_SLOT] = regionSettingsBtn(regionId)
 
-        // Rows 1-4 — sub-regions (now clickable)
-        region.subRegions.forEachIndexed { i, sub ->
-            val slot = SUB_REGION_START + i
-            if (slot <= SUB_REGION_END) layout[slot] = subRegionItem(sub)
-        }
+        layout[Slots.SUMMARY] = summaryItem(region)
 
-        // Row 5
-        for (i in 45..53) layout[i] = filler()
-        layout[BACK_SLOT] = backBtn()
+        layout[Slots.PRIORITY] = priorityItem(region)
 
+        layout[Slots.NATURAL] = naturalSettingsItem(region)
+        layout[Slots.CUSTOM] = customSpawnItem(region)
+
+        layout[Slots.BACK] = backBtn()
         return layout
     }
 
-    private fun regionSettingsBtn(regionId: String): ItemStack {
-        val r = RegionsConfig.getRegion(regionId) ?: return filler()
-        val restr = r.spawnRestrictions
-        return CustomGui.createPlayerHeadButton(
-            "RegionSettings",
-            Text.literal("Region Settings").formatted(Formatting.AQUA),
-            listOf(
-                Text.literal("§7This region's own settings."),
-                Text.literal(""),
-                Text.literal("§7Natural Spawns — Disable All: ${flag(restr.disableAll)}"),
-                Text.literal("§7Natural Spawns — Blocked Species: §f${restr.disallowedSpecies.size}"),
-                Text.literal(""),
-                Text.literal("§eClick §7to configure")
-            ),
-            Textures.SETTINGS
-        )
+    private fun refresh(player: ServerPlayerEntity, regionId: String) {
+        val region = RegionsConfig.getRegion(regionId) ?: return
+        CustomGui.refreshGui(player, buildLayout(region))
     }
 
-    private fun subRegionItem(sub: SubRegionData): ItemStack {
-        val restr = sub.spawnRestrictions
-        return CustomGui.createPlayerHeadButton(
-            "sub_${sub.subRegionId}",
-            Text.literal(sub.subRegionName).formatted(Formatting.LIGHT_PURPLE),
-            listOf(
-                Text.literal("§8${sub.subRegionId}"),
-                Text.literal("§7(${sub.pos1.x},${sub.pos1.y},${sub.pos1.z}) → (${sub.pos2.x},${sub.pos2.y},${sub.pos2.z})"),
-                Text.literal(""),
-                Text.literal("§7Natural Spawns — Disable All: ${flag(restr.disableAll)}"),
-                Text.literal("§7Natural Spawns — Blocked Species: §f${restr.disallowedSpecies.size}"),
-                Text.literal(""),
-                Text.literal("§eClick §7to configure")
-            ),
-            Textures.SUB
-        )
+    private fun adjustPriority(player: ServerPlayerEntity, regionId: String, delta: Int) {
+        RegionsConfig.updateRegion(regionId) {
+            it.priority = (it.priority + delta).coerceIn(Limits.MIN_PRIORITY, Limits.MAX_PRIORITY)
+        }
+        refresh(player, regionId)
     }
+
+    private fun summaryItem(region: RegionData) = CustomGui.createPlayerHeadButton(
+        "region_${region.regionId}",
+        Text.literal(region.regionName).formatted(Formatting.YELLOW),
+        listOf(
+            Text.literal("Â§8${region.regionId}  [${region.mode}]"),
+            Text.literal("Â§7Dimension: Â§f${region.dimension}"),
+            Text.literal("Â§7Priority: Â§f${region.priority}"),
+            Text.literal(""),
+            Text.literal("Â§8Higher priority controls overlapping positions.")
+        ),
+        Textures.REGION
+    )
+
+    private fun priorityItem(region: RegionData): ItemStack {
+        val overlaps = RegionsConfig.regions.values
+            .filter { it.regionId != region.regionId && it.dimension == region.dimension && regionsOverlap(region, it) }
+            .sortedWith(compareByDescending<RegionData> { it.priority }.thenBy { it.regionId })
+
+        return ItemStack(Items.COMPARATOR).apply {
+            setCustomName(Text.literal("Priority: ${region.priority}").formatted(Formatting.GOLD))
+            CustomGui.setItemLore(this, buildList {
+                add("Â§7Higher priority controls overlapping areas.")
+                add("Â§8Tie-breaker: smaller region, then region id.")
+                add("")
+                add("Â§7Left-click: Â§a+1")
+                add("Â§7Right-click: Â§c-1")
+                add("")
+                if (overlaps.isEmpty()) {
+                    add("Â§7Overlaps: Â§fnone")
+                } else {
+                    add("Â§7Overlaps:")
+                    overlaps.take(5).forEach {
+                        add("Â§8- Â§f${it.regionName} Â§7priority Â§f${it.priority}")
+                    }
+                    if (overlaps.size > 5) add("Â§8...and ${overlaps.size - 5} more")
+                }
+            })
+        }
+    }
+
+    private fun naturalSettingsItem(region: RegionData) = CustomGui.createPlayerHeadButton(
+        "NaturalSettings",
+        Text.literal("Natural Spawn Settings").formatted(Formatting.GREEN),
+        listOf(
+            Text.literal("Â§7Controls wild/natural Pokemon where"),
+            Text.literal("Â§7this region wins priority."),
+            Text.literal(""),
+            Text.literal("Â§7Disable All: ${flag(region.spawnRestrictions.disableAll)}"),
+            Text.literal("Â§7Blocked Species: Â§f${region.spawnRestrictions.disallowedSpecies.size}"),
+            Text.literal("Â§7Labels: Â§f${region.spawnRestrictions.disallowedLabels.size}"),
+            Text.literal("Â§7Conditions: Â§f${region.spawnRestrictions.exclusionConditions.size}"),
+            Text.literal(""),
+            Text.literal("Â§eClick Â§7to configure")
+        ),
+        Textures.NATURAL
+    )
+
+    private fun customSpawnItem(region: RegionData) = CustomGui.createPlayerHeadButton(
+        "CustomSpawns",
+        Text.literal("Custom Spawns").formatted(Formatting.LIGHT_PURPLE),
+        listOf(
+            Text.literal("Â§7Pokemon this region spawns itself"),
+            Text.literal("Â§7where it wins priority."),
+            Text.literal(""),
+            Text.literal("Â§7Configured Pokemon: Â§f${region.selectedPokemon.size}"),
+            Text.literal("Â§7Timer: Â§f${region.spawnTimerTicks} ticks Â§8(${region.spawnTimerTicks / 20.0}s)"),
+            Text.literal("Â§7Max Alive: Â§f${region.maxTotalSpawns} Â§8(0 = unlimited)"),
+            Text.literal(""),
+            Text.literal("Â§eClick Â§7to configure")
+        ),
+        Textures.CUSTOM
+    )
+
 
     private fun backBtn() = CustomGui.createPlayerHeadButton(
         "Back",
         Text.literal("Back").formatted(Formatting.RED),
-        listOf(Text.literal("§7Return to region list")),
+        listOf(Text.literal("Â§7Return to region list")),
         Textures.BACK
     )
 
-    private fun flag(b: Boolean) = if (b) "§atrue" else "§cfalse"
-    private fun glass()  = ItemStack(Items.CYAN_STAINED_GLASS_PANE).apply  { setCustomName(Text.literal(" ")) }
-    private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply  { setCustomName(Text.literal(" ")) }
+    private fun regionsOverlap(a: RegionData, b: RegionData): Boolean {
+        val aMinX = minOf(a.pos1.x, a.pos2.x); val aMaxX = maxOf(a.pos1.x, a.pos2.x)
+        val aMinY = minOf(a.pos1.y, a.pos2.y); val aMaxY = maxOf(a.pos1.y, a.pos2.y)
+        val aMinZ = minOf(a.pos1.z, a.pos2.z); val aMaxZ = maxOf(a.pos1.z, a.pos2.z)
+        val bMinX = minOf(b.pos1.x, b.pos2.x); val bMaxX = maxOf(b.pos1.x, b.pos2.x)
+        val bMinY = minOf(b.pos1.y, b.pos2.y); val bMaxY = maxOf(b.pos1.y, b.pos2.y)
+        val bMinZ = minOf(b.pos1.z, b.pos2.z); val bMaxZ = maxOf(b.pos1.z, b.pos2.z)
+        return aMinX <= bMaxX && aMaxX >= bMinX &&
+                aMinY <= bMaxY && aMaxY >= bMinY &&
+                aMinZ <= bMaxZ && aMaxZ >= bMinZ
+    }
+
+    private fun flag(b: Boolean) = if (b) "Â§atrue" else "Â§cfalse"
+    private fun glass() = ItemStack(Items.CYAN_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
+    private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
 }

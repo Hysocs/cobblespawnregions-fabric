@@ -99,6 +99,13 @@ data class HeldItemsOnSpawn(
     )
 )
 
+data class RegionWanderingSettings(
+    var enabled: Boolean = true,
+    var returnTarget: String = "RANDOM",
+    var speed: Double = 1.0,
+    var tickDelay: Int = 10
+)
+
 data class PokemonSpawnEntry(
     val pokemonName: String,
     var formName: String? = null,
@@ -108,24 +115,17 @@ data class PokemonSpawnEntry(
     var minLevel: Int,
     var maxLevel: Int,
     var sizeSettings: SizeSettings = SizeSettings(),
-    val captureSettings: CaptureSettings = CaptureSettings(),
-    val ivSettings: IVSettings = IVSettings(),
-    val evSettings: EVSettings = EVSettings(),
-    val spawnSettings: SpawnSettings = SpawnSettings(),
+    var captureSettings: CaptureSettings = CaptureSettings(),
+    var ivSettings: IVSettings = IVSettings(),
+    var evSettings: EVSettings = EVSettings(),
+    var spawnSettings: SpawnSettings = SpawnSettings(),
+    var wanderingSettings: RegionWanderingSettings = RegionWanderingSettings(),
     var heldItemsOnSpawn: HeldItemsOnSpawn = HeldItemsOnSpawn(),
     var moves: MovesSettings? = null,
     var maxSpawnCount: Int = 5,
 )
 
 // ── Region data classes ───────────────────────────────────────────────────────
-
-data class SubRegionData(
-    val subRegionId: String = "",
-    var subRegionName: String = "unnamed_sub_region",
-    val pos1: SerializableBlockPos = SerializableBlockPos(),
-    val pos2: SerializableBlockPos = SerializableBlockPos(),
-    var spawnRestrictions: RegionRestrictionConfig = RegionRestrictionConfig()
-)
 
 data class RegionData(
     override val version: String = "1.0.0",
@@ -136,13 +136,13 @@ data class RegionData(
     val pos2: SerializableBlockPos = SerializableBlockPos(),
     val dimension: String = "minecraft:overworld",
     val mode: String = "COORDS",
+    var priority: Int = 0,
 
     // Spawn control
     var spawnTimerTicks: Long = 200,
     var selectedPokemon: MutableList<PokemonSpawnEntry> = mutableListOf(),
 
     var spawnRestrictions: RegionRestrictionConfig = RegionRestrictionConfig(),
-    val subRegions: MutableList<SubRegionData> = mutableListOf(),
 
     var maxTotalSpawns: Int = 20
 ) : ConfigData
@@ -183,8 +183,7 @@ object RegionsConfig {
 
     val regions: Map<String, RegionData>
         get() = regionFileMap.keys.mapNotNull { id ->
-            val fn = regionFileMap[id] ?: return@mapNotNull null
-            configManager.getSecondaryConfig<RegionData>(fn)?.let { id to it }
+            getRegion(id)?.let { id to it }
         }.toMap()
 
     // ── Init ──────────────────────────────────────────────────────────────────
@@ -232,6 +231,7 @@ object RegionsConfig {
                 val relativeName = "regions/${file.name}"
                 val reader = JsonReader(file.reader()).apply { isLenient = true }
                 val raw: RegionData = gson.fromJson(reader, RegionData::class.java) ?: return@forEach
+                normalizeRegion(raw)
                 regionFileMap[raw.regionId] = relativeName
                 configManager.registerSecondaryConfig(
                     fileName = relativeName,
@@ -258,6 +258,7 @@ object RegionsConfig {
 
     fun addRegion(data: RegionData): Boolean {
         if (regionFileMap.containsKey(data.regionId)) return false
+        normalizeRegion(data)
         val fileName = fileNameForId(data.regionId)
         regionFileMap[data.regionId] = fileName
         runBlocking {
@@ -274,7 +275,37 @@ object RegionsConfig {
 
     fun getRegion(regionId: String): RegionData? {
         val fn = regionFileMap[regionId] ?: return null
-        return configManager.getSecondaryConfig(fn)
+        return configManager.getSecondaryConfig<RegionData>(fn)?.also(::normalizeRegion)
+    }
+
+    fun regionsInPriorityOrder(): List<RegionData> =
+        regions.values.sortedWith(
+            compareByDescending<RegionData> { it.priority }
+                .thenBy { regionVolume(it) }
+                .thenBy { it.regionId }
+        )
+
+    fun regionsAt(pos: BlockPos, dimension: String): List<RegionData> =
+        regionsInPriorityOrder().filter { it.dimension == dimension && contains(it, pos) }
+
+    fun controllingRegionAt(pos: BlockPos, dimension: String): RegionData? =
+        regionsAt(pos, dimension).firstOrNull()
+
+    fun isControllingRegion(regionId: String, pos: BlockPos, dimension: String): Boolean =
+        controllingRegionAt(pos, dimension)?.regionId == regionId
+
+    fun contains(region: RegionData, pos: BlockPos): Boolean {
+        val minX = minOf(region.pos1.x, region.pos2.x); val maxX = maxOf(region.pos1.x, region.pos2.x)
+        val minY = minOf(region.pos1.y, region.pos2.y); val maxY = maxOf(region.pos1.y, region.pos2.y)
+        val minZ = minOf(region.pos1.z, region.pos2.z); val maxZ = maxOf(region.pos1.z, region.pos2.z)
+        return pos.x in minX..maxX && pos.y in minY..maxY && pos.z in minZ..maxZ
+    }
+
+    fun regionVolume(region: RegionData): Long {
+        val x = maxOf(region.pos1.x, region.pos2.x) - minOf(region.pos1.x, region.pos2.x) + 1L
+        val y = maxOf(region.pos1.y, region.pos2.y) - minOf(region.pos1.y, region.pos2.y) + 1L
+        val z = maxOf(region.pos1.z, region.pos2.z) - minOf(region.pos1.z, region.pos2.z) + 1L
+        return x * y * z
     }
 
     fun removeRegion(regionId: String): Boolean {
@@ -292,29 +323,6 @@ object RegionsConfig {
         return region
     }
 
-    // ── Sub-region CRUD ───────────────────────────────────────────────────────
-
-    fun addSubRegion(regionId: String, sub: SubRegionData): Boolean {
-        val region = getRegion(regionId) ?: return false
-        if (region.subRegions.any { it.subRegionId == sub.subRegionId }) return false
-        region.subRegions.add(sub)
-        saveRegion(regionId)
-        return true
-    }
-
-    fun removeSubRegion(regionId: String, subRegionId: String): Boolean {
-        val region = getRegion(regionId) ?: return false
-        val removed = region.subRegions.removeIf { it.subRegionId == subRegionId }
-        if (removed) saveRegion(regionId)
-        return removed
-    }
-
-    fun getSubRegions(regionId: String): List<SubRegionData> =
-        getRegion(regionId)?.subRegions ?: emptyList()
-
-    fun getSubRegion(regionId: String, subRegionId: String): SubRegionData? =
-        getRegion(regionId)?.subRegions?.find { it.subRegionId == subRegionId }
-
     // ── Pokémon-entry CRUD (on regions) ───────────────────────────────────────
 
     fun addPokemonToRegion(regionId: String, entry: PokemonSpawnEntry): Boolean {
@@ -322,7 +330,7 @@ object RegionsConfig {
         updateRegion(regionId) { region ->
             val exists = region.selectedPokemon.any {
                 it.pokemonName.equals(entry.pokemonName, ignoreCase = true) &&
-                        (it.formName?.equals(entry.formName, ignoreCase = true) ?: (entry.formName == null)) &&
+                        sameForm(it.formName, entry.formName) &&
                         it.aspects.map { a -> a.lowercase() }.toSet() ==
                         entry.aspects.map { a -> a.lowercase() }.toSet()
             }
@@ -344,7 +352,7 @@ object RegionsConfig {
         updateRegion(regionId) { region ->
             val removed = region.selectedPokemon.removeIf {
                 it.pokemonName.equals(pokemonName, ignoreCase = true) &&
-                        (it.formName?.equals(formName, ignoreCase = true) ?: (formName == null)) &&
+                        sameForm(it.formName, formName) &&
                         it.aspects.map { a -> a.lowercase() }.toSet() ==
                         aspects.map { a -> a.lowercase() }.toSet()
             }
@@ -362,7 +370,7 @@ object RegionsConfig {
         val region = getRegion(regionId) ?: return null
         return region.selectedPokemon.find {
             it.pokemonName.equals(pokemonName, ignoreCase = true) &&
-                    (it.formName?.equals(formName, ignoreCase = true) ?: (formName == null)) &&
+                    sameForm(it.formName, formName) &&
                     it.aspects.map { a -> a.lowercase() }.toSet() ==
                     aspects.map { a -> a.lowercase() }.toSet()
         }
@@ -379,7 +387,7 @@ object RegionsConfig {
         updateRegion(regionId) { region ->
             val entry = region.selectedPokemon.find {
                 it.pokemonName.equals(pokemonName, ignoreCase = true) &&
-                        (it.formName?.equals(formName, ignoreCase = true) ?: (formName == null)) &&
+                        sameForm(it.formName, formName) &&
                         it.aspects.map { a -> a.lowercase() }.toSet() ==
                         aspects.map { a -> a.lowercase() }.toSet()
             }
@@ -441,6 +449,47 @@ object RegionsConfig {
     private fun fileNameForId(id: String) = "regions/region_$id.jsonc"
     private fun updateDebugState() = LogDebug.setDebugEnabledForMod(MOD_ID, config.debugEnabled)
     private fun roundToOneDecimal(v: Float) = (v * 10).roundToInt() / 10f
+    private fun sameForm(a: String?, b: String?): Boolean = normalizeForm(a) == normalizeForm(b)
+    private fun normalizeForm(form: String?): String {
+        val normalized = form?.trim()?.lowercase().orEmpty()
+        return when (normalized) {
+            "", "normal", "default", "standard" -> ""
+            else -> normalized
+        }
+    }
+
+    @Suppress("SENSELESS_COMPARISON")
+    private fun normalizeRegion(region: RegionData) {
+        if (region.selectedPokemon == null) region.selectedPokemon = mutableListOf()
+        if (region.spawnRestrictions == null) region.spawnRestrictions = RegionRestrictionConfig()
+        normalizeRestrictions(region.spawnRestrictions)
+        region.selectedPokemon.forEach(::normalizePokemonEntry)
+    }
+
+    @Suppress("SENSELESS_COMPARISON")
+    private fun normalizeRestrictions(restriction: RegionRestrictionConfig) {
+        if (restriction.disallowedSpecies == null) restriction.disallowedSpecies = mutableListOf()
+        if (restriction.disallowedLabels == null) restriction.disallowedLabels = mutableListOf()
+        if (restriction.exclusionConditions == null) restriction.exclusionConditions = mutableListOf()
+    }
+
+    @Suppress("SENSELESS_COMPARISON")
+    private fun normalizePokemonEntry(entry: PokemonSpawnEntry) {
+        if (entry.aspects == null) entry.aspects = emptySet()
+        if (entry.spawnChanceType == null) entry.spawnChanceType = SpawnChanceType.COMPETITIVE
+        if (entry.sizeSettings == null) entry.sizeSettings = SizeSettings()
+        if (entry.captureSettings == null) entry.captureSettings = CaptureSettings()
+        if (entry.ivSettings == null) entry.ivSettings = IVSettings()
+        if (entry.evSettings == null) entry.evSettings = EVSettings()
+        if (entry.spawnSettings == null) {
+            entry.spawnSettings = SpawnSettings(allowedBlocks = listOf("#solid", "#water", "#air"))
+        }
+        if (entry.wanderingSettings == null) entry.wanderingSettings = RegionWanderingSettings()
+        if (entry.heldItemsOnSpawn == null) entry.heldItemsOnSpawn = HeldItemsOnSpawn()
+        if (entry.minLevel <= 0) entry.minLevel = 1
+        if (entry.maxLevel <= 0) entry.maxLevel = 100
+        if (entry.maxLevel < entry.minLevel) entry.maxLevel = entry.minLevel
+    }
 
     private class SerializableBlockPosAdapter : TypeAdapter<SerializableBlockPos>() {
         override fun write(out: JsonWriter, value: SerializableBlockPos?) {
@@ -468,28 +517,13 @@ object RegionsConfig {
 
     // ── GUI helpers ───────────────────────────────────────────────────────────
 
-    fun getRestriction(regionId: String, subRegionId: String? = null): RegionRestrictionConfig? {
+    fun getRestriction(regionId: String): RegionRestrictionConfig? {
         val region = getRegion(regionId) ?: return null
-        return if (subRegionId != null)
-            region.subRegions.find { it.subRegionId == subRegionId }?.spawnRestrictions
-        else
-            region.spawnRestrictions
+        return region.spawnRestrictions
     }
 
-    fun scopeLabel(regionId: String, subRegionId: String?): String {
-        val region = getRegion(regionId)
-        return if (subRegionId != null) {
-            region?.subRegions?.find { it.subRegionId == subRegionId }?.subRegionName ?: subRegionId
-        } else {
-            region?.regionName ?: regionId
-        }
+    fun scopeLabel(regionId: String): String {
+        return getRegion(regionId)?.regionName ?: regionId
     }
 
-    fun updateSubRegion(regionId: String, subRegionId: String, update: (SubRegionData) -> Unit): SubRegionData? {
-        val region = getRegion(regionId) ?: return null
-        val sub = region.subRegions.find { it.subRegionId == subRegionId } ?: return null
-        update(sub)
-        saveRegion(regionId)
-        return sub
-    }
 }

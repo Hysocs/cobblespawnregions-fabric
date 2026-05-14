@@ -197,7 +197,9 @@ object RegionSpawnBlocksGui {
             e.spawnSettings.allowedBlocks = list
         }
         player.sendMessage(Text.literal("§c[CSR] Removed §f$removed§c."), false)
-        CustomGui.refreshGui(player, buildLayout(regionId, pokemonName, formName, aspects))
+        player.server.execute {
+            CustomGui.refreshGui(player, buildLayout(regionId, pokemonName, formName, aspects))
+        }
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────

@@ -4,7 +4,6 @@ import com.cobblemon.mod.common.api.moves.Moves
 import com.cobblemon.mod.common.api.pokemon.PokemonProperties
 import com.cobblemon.mod.common.api.pokemon.PokemonSpecies
 import com.cobblemon.mod.common.api.pokemon.stats.Stats
-import com.cobblemon.mod.common.entity.PoseType
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity
 import com.cobblemon.mod.common.pokemon.Pokemon
 import com.everlastingutils.utils.logDebug
@@ -18,12 +17,15 @@ import net.minecraft.util.math.Box
 import net.minecraft.util.math.random.Random
 import net.minecraft.world.chunk.ChunkStatus
 import org.slf4j.LoggerFactory
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 object RegionSpawnHelper {
 
     private val logger = LoggerFactory.getLogger("RegionSpawnHelper")
     private const val MOD_ID = "cobblespawnregions"
     private val random: Random = Random.create()
+    private val spawnAttemptLocks = ConcurrentHashMap<String, Any>()
 
     // ════════════════════════════════════════════════════════════════════════
     // PUBLIC API
@@ -50,6 +52,8 @@ object RegionSpawnHelper {
         amount: Int = 1,
         respectTimer: Boolean = true
     ): List<PokemonEntity> {
+        val attemptLock = spawnAttemptLocks.computeIfAbsent(regionId) { Any() }
+        return synchronized(attemptLock) {
         val region = RegionsConfig.getRegion(regionId) ?: return emptyList()
 
         if (region.dimension != world.registryKey.value.toString()) return emptyList()
@@ -72,7 +76,7 @@ object RegionSpawnHelper {
         // ── Per-entry cap filter + basic condition check ───────────────────────
         val eligible = region.selectedPokemon.filter { entry ->
             checkBasicSpawnConditions(world, entry) == null &&
-                    isEntryUnderCap(regionId, entry)
+                    isEntryUnderCap(world, region, entry)
         }
 
         if (eligible.isEmpty()) {
@@ -90,12 +94,12 @@ object RegionSpawnHelper {
             val entry = selectPokemonByWeight(eligible) ?: return@repeat
 
             // Re-check per-entry cap for the chosen entry
-            if (!isEntryUnderCap(regionId, entry)) return@repeat
+            if (!isEntryUnderCap(world, region, entry)) return@repeat
 
             val pos = pickRandomSpawnPos(regionId, entry.spawnSettings.allowedBlocks) ?: run {
                 logDebug(
                     "No position matching allowedBlocks=${entry.spawnSettings.allowedBlocks} " +
-                            "for '${entry.pokemonName}' in region '$regionId'.", MOD_ID
+                            "controlled by region '$regionId' for '${entry.pokemonName}'.", MOD_ID
                 )
                 return@repeat
             }
@@ -109,7 +113,8 @@ object RegionSpawnHelper {
         if (spawned.isNotEmpty()) {
             logDebug("Spawned ${spawned.size} Pokémon in region '$regionId'.", MOD_ID)
         }
-        return spawned
+        spawned
+        }
     }
 
     /**
@@ -121,8 +126,8 @@ object RegionSpawnHelper {
      *  2. Registered in [RegionEntityTracker] so it counts against caps even
      *     while its chunk is unloaded.
      *
-     * If the spawn position is 2+ blocks above any solid surface, the entity
-     * is locked into [PoseType.FLY] to display the correct flying animation.
+     * If the spawn position is 2+ blocks above any solid surface, flying-capable
+     * species are put into Cobblemon's actual flying pathing state.
      */
     fun spawnPokemonAt(
         world: ServerWorld,
@@ -189,6 +194,17 @@ object RegionSpawnHelper {
         applyCustomSize(pokemon, entry)
         applyHeldItems(pokemon, entry)
 
+        val entryKey = if (regionId != null) RegionEntityTracker.entryKey(entry) else null
+        val spawnId = if (regionId != null) UUID.randomUUID().toString() else null
+        if (regionId != null && entryKey != null && spawnId != null) {
+            pokemon.persistentData.putString(RegionEntityTracker.REGION_KEY, regionId)
+            pokemon.persistentData.putString(RegionEntityTracker.ENTRY_KEY, entryKey)
+            pokemon.persistentData.putString(RegionEntityTracker.SPAWN_ID_KEY, spawnId)
+            pokemon.persistentData.putLong(RegionEntityTracker.SPAWNED_AT_MS_KEY, System.currentTimeMillis())
+            pokemon.persistentData.putLong(RegionEntityTracker.SPAWNED_AT_WORLD_TIME_KEY, world.time)
+            pokemon.persistentData.putString(RegionEntityTracker.DIMENSION_KEY, world.registryKey.value.toString())
+        }
+
         val spawnX = spawnPos.x + 0.5
         val spawnY = spawnPos.y.toDouble()
         val spawnZ = spawnPos.z + 0.5
@@ -212,35 +228,20 @@ object RegionSpawnHelper {
         return if (world.spawnEntity(entity)) {
             logger.info("[CSR-SPAWN] SUCCESS — spawned '${pokemon.species.name}' lv$level @ $spawnPos")
 
-            // ── 8. Tag + track if this is a region-managed spawn ──────────────
-            if (regionId != null) {
-                val eKey = RegionEntityTracker.entryKey(entry)
-                pokemon.persistentData.putString("csr_region", regionId)
-                pokemon.persistentData.putString("csr_entry_key", eKey)
-                RegionEntityTracker.track(regionId, eKey, entity.uuid)
-                logger.info("[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$eKey")
+            // ── 8. Track if this is a region-managed spawn ───────────────────
+            if (regionId != null && entryKey != null && spawnId != null) {
+                RegionEntityTracker.track(regionId, entryKey, spawnId, entity.uuid)
+                RegionWanderingGoalManager.attachIfConfigured(entity)
+                logger.info("[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$entryKey")
             }
 
-            // ── 9. Flying pose if spawned 2+ blocks above solid ground ────────
-            // We check whether the spawn point is floating in air with solid ground
-            // at least 2 blocks below. If so, we lock the entity into PoseType.FLY
-            // so Cobblemon renders the correct flying animation.
-            // enablePoseTypeRecalculation = false prevents Cobblemon's AI tick from
-            // immediately reverting the pose back to STAND or WALK on the next tick.
             // ── 9. Flying setup if spawned 2+ blocks above solid ground ──────
-            // Without intervention, gravity pulls the entity to the ground before
-            // Cobblemon's flying AI goals can run on the first tick.
-            // We only act when the species is actually capable of flying (canFly),
-            // so non-flying Pokémon placed at height still fall/land normally.
-            // setNoGravity(true) gives Cobblemon's own flying AI time to activate;
-            // it will manage gravity from that point forward (re-enabling it on land).
-            if (isFlyingPosition(world, spawnPos) &&
-                entity.pokemon.species.behaviour.moving.fly.canFly
-            ) {
-                entity.setNoGravity(true)
-                entity.dataTracker.set(PokemonEntity.Companion.POSE_TYPE, PoseType.FLY)
+            // Cobblemon's pathing checks PokemonEntity.isFlying(), which is backed
+            // by the FLYING behaviour flag. The pose alone is only visual.
+            if (isFlyingPosition(world, spawnPos) && entity.canFly()) {
+                entity.setFlying(true)
                 logger.info(
-                    "[CSR-SPAWN] Flying spawn — gravity disabled + fly pose set " +
+                    "[CSR-SPAWN] Flying spawn — Cobblemon flying flag set " +
                             "for '${pokemon.species.name}' @ $spawnPos"
                 )
             }
@@ -258,11 +259,14 @@ object RegionSpawnHelper {
      * one of [allowedBlocks]. If the list is empty, any floor is accepted.
      */
     fun pickRandomSpawnPos(regionId: String, allowedBlocks: List<String>): BlockPos? {
+        val region = RegionsConfig.getRegion(regionId) ?: return null
         if (SpawnPointStore.isEmpty(regionId)) return null
 
         if (allowedBlocks.isEmpty()) {
             val all = mutableListOf<BlockPos>()
-            SpawnPointStore.forEach(regionId) { pos, _, _ -> all.add(pos) }
+            SpawnPointStore.forEach(regionId) { pos, _, _ ->
+                if (RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) all.add(pos)
+            }
             return if (all.isEmpty()) null else all[random.nextInt(all.size)]
         }
 
@@ -274,14 +278,16 @@ object RegionSpawnHelper {
             .map    { it.lowercase() }.toSet()
 
         val matches = mutableListOf<BlockPos>()
-        SpawnPointStore.forEach(regionId) { pos, block, _ ->
+        SpawnPointStore.forEach(regionId) { pos, block, type ->
+            if (!RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) return@forEach
+
             val id         = Registries.BLOCK.getId(block).toString().lowercase()
-            val isAirBlock = block.defaultState.isAir
-            val isWater    = block == net.minecraft.block.Blocks.WATER
-            val isSolid    = !isAirBlock && !isWater
+            val isAirSpawn = type == SpawnType.AIR
+            val isWater    = type == SpawnType.WATER
+            val isSolid    = type == SpawnType.SOLID
 
             val passes = id in literalIds
-                    || (wantAir   && isAirBlock)
+                    || (wantAir   && isAirSpawn)
                     || (wantWater && isWater)
                     || (wantSolid && isSolid)
 
@@ -369,6 +375,20 @@ object RegionSpawnHelper {
         if (entry.maxSpawnCount <= 0) return true
         val count = RegionEntityTracker.countForEntry(regionId, RegionEntityTracker.entryKey(entry))
         return count < entry.maxSpawnCount
+    }
+
+    fun isEntryUnderCap(world: ServerWorld, region: RegionData, entry: PokemonSpawnEntry): Boolean {
+        if (entry.maxSpawnCount <= 0) return true
+
+        val entryKey = RegionEntityTracker.entryKey(entry)
+        val trackedCount = RegionEntityTracker.countForEntry(region.regionId, entryKey)
+        val loadedManagedCount = world.getEntitiesByClass(PokemonEntity::class.java, regionBoundingBox(region)) { entity ->
+            val data = entity.pokemon.persistentData
+            data.getString(RegionEntityTracker.REGION_KEY) == region.regionId &&
+                    data.getString(RegionEntityTracker.ENTRY_KEY) == entryKey
+        }.size
+
+        return maxOf(trackedCount, loadedManagedCount) < entry.maxSpawnCount
     }
 
     // ════════════════════════════════════════════════════════════════════════

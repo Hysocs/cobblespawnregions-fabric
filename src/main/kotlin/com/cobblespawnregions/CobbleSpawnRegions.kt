@@ -2,9 +2,12 @@ package com.cobblespawnregions
 
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity
 import com.cobblespawnregions.utils.RegionCommands
+import com.cobblespawnregions.utils.RegionBattleTracker
+import com.cobblespawnregions.utils.RegionCatchingTracker
 import com.cobblespawnregions.utils.RegionEntityTracker
 import com.cobblespawnregions.utils.RegionParticleUtils
 import com.cobblespawnregions.utils.RegionSpawnHelper
+import com.cobblespawnregions.utils.RegionWanderingGoalManager
 import com.cobblespawnregions.utils.RegionsConfig
 import com.cobblespawnregions.utils.SpawnPointScanner
 import com.cobblespawnregions.utils.SpawnPointStore
@@ -35,7 +38,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-enum class StickMode { COORDS, CHUNK, SUB_REGION }
+enum class StickMode { COORDS, CHUNK }
 
 data class PlayerSelection(
     val mode: StickMode = StickMode.COORDS,
@@ -53,9 +56,11 @@ object CobbleSpawnRegions : ModInitializer {
 
     private val logger = LoggerFactory.getLogger("cobblespawnregions")
     const val MOD_ID = "cobblespawnregions"
+    private val battleTracker = RegionBattleTracker()
+    private val catchingTracker = RegionCatchingTracker()
 
     val playerSelections = ConcurrentHashMap<UUID, PlayerSelection>()
-    val activeVisualizations = ConcurrentHashMap<UUID, String>()
+    val activeVisualizations = ConcurrentHashMap<UUID, MutableSet<String>>()
 
     @Volatile private var serverReady = false
 
@@ -64,6 +69,8 @@ object CobbleSpawnRegions : ModInitializer {
 
         RegionsConfig.initializeAndLoad()
         RegionCommands.register()
+        battleTracker.registerEvents()
+        catchingTracker.registerEvents()
 
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
             SchedulerManager.onServerStarting(server)
@@ -105,6 +112,8 @@ object CobbleSpawnRegions : ModInitializer {
             ) {
                 processAllRegionSpawns(server)
             }
+
+            battleTracker.startCleanupScheduler(server)
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { _ ->
@@ -113,10 +122,12 @@ object CobbleSpawnRegions : ModInitializer {
             SchedulerManager.shutdown("cobblespawnregions-particle-loop")
             SchedulerManager.shutdown("cobblespawnregions-scan-loop")
             SchedulerManager.shutdown("cobblespawnregions-spawn-loop")
+            SchedulerManager.shutdown("cobblespawnregions-battle-cleanup")
             playerSelections.clear()
             activeVisualizations.clear()
             SpawnPointStore.clearAll()
             RegionEntityTracker.clearAll()
+            RegionWanderingGoalManager.clearAll()
         }
 
         ServerChunkEvents.CHUNK_LOAD.register { world, chunk ->
@@ -148,17 +159,25 @@ object CobbleSpawnRegions : ModInitializer {
         // ── Entity removal listener ────────────────────────────────────────────
         // Untrack our Pokémon when they are genuinely removed (killed, despawned,
         // changed dimension) — but NOT when their chunk is merely unloaded.
+        ServerEntityEvents.ENTITY_LOAD.register { entity, _ ->
+            if (entity is PokemonEntity && RegionEntityTracker.isManaged(entity)) {
+                RegionEntityTracker.trackLoadedEntity(entity)
+            }
+        }
+
         ServerEntityEvents.ENTITY_UNLOAD.register { entity, _ ->
             if (entity !is PokemonEntity) return@register
+            RegionWanderingGoalManager.forget(entity.uuid)
             val reason = entity.removalReason ?: return@register
             when (reason) {
                 Entity.RemovalReason.UNLOADED_TO_CHUNK,
                 Entity.RemovalReason.UNLOADED_WITH_PLAYER -> {
+                    RegionEntityTracker.forgetLiveUuid(entity.uuid)
                     // Entity is hibernating, not dead — leave it in the tracker.
                 }
                 else -> {
                     // KILLED, DISCARDED, CHANGED_DIMENSION, etc.
-                    val wasTracked = entity.pokemon.persistentData.contains("csr_region")
+                    val wasTracked = RegionEntityTracker.isManaged(entity)
                     RegionEntityTracker.untrack(entity.uuid)
                     if (wasTracked) {
                         logDebug(
@@ -271,20 +290,15 @@ object CobbleSpawnRegions : ModInitializer {
             .get(DataComponentTypes.CUSTOM_DATA)?.copyNbt() ?: return null
         if (!nbt.getBoolean("cobblespawnregions:is_region_stick")) return null
         return when (nbt.getString("cobblespawnregions:mode")) {
-            "CHUNK"      -> StickMode.CHUNK
-            "SUB_REGION" -> StickMode.SUB_REGION
-            else         -> StickMode.COORDS
+            "CHUNK" -> StickMode.CHUNK
+            else    -> StickMode.COORDS
         }
     }
 
     private fun sendStatus(player: ServerPlayerEntity, sel: PlayerSelection) {
-        val createCmd = when (sel.mode) {
-            StickMode.SUB_REGION -> "/csr subregion create <parentRegion> <n>"
-            else                 -> "/csr region create <n>"
-        }
         when {
             sel.isBothSet  -> player.sendMessage(Text.literal(
-                "§a[Regions] §fBoth points set — run §e$createCmd §fto save."
+                "§a[Regions] §fBoth points set — run §e/csr region create <n> §fto save."
             ), false)
             sel.hasFirst   -> player.sendMessage(Text.literal(
                 "§a[Regions] §fNow §eright-click §fa block to set the second point."

@@ -30,37 +30,37 @@ object RegionConditionSelectorGui {
         const val COND   = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmViNTg4YjIxYTZmOThhZDFmZjRlMDg1YzU1MmRjYjA1MGVmYzljYWI0MjdmNDcyNjkwOTYxMjg5N2I5Zjk3In19fQ=="
     }
 
-    fun open(player: ServerPlayerEntity, regionId: String, subRegionId: String?, conditions: List<String>, page: Int = 0) {
+    fun open(player: ServerPlayerEntity, regionId: String, conditions: List<String>, page: Int = 0) {
         playerPages[player] = page
         playerConditions[player] = conditions
 
-        val label = RegionsConfig.scopeLabel(regionId, subRegionId)
+        val label = RegionsConfig.scopeLabel(regionId)
         CustomGui.openGui(
             player,
             "Exclusion Conditions — $label",
-            buildLayout(player, regionId, subRegionId),
-            { ctx -> handleClick(ctx, player, regionId, subRegionId) },
+            buildLayout(player, regionId),
+            { ctx -> handleClick(ctx, player, regionId) },
             {}
         )
     }
 
-    private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
+    private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String) {
         val conditions = playerConditions[player] ?: return
         val page = playerPages[player] ?: 0
 
         when (ctx.slotIndex) {
-            Slots.PREV -> if (page > 0) { playerPages[player] = page - 1; refresh(player, regionId, subRegionId) }
-            Slots.NEXT -> if ((page + 1) * PAGE_SIZE < conditions.size) { playerPages[player] = page + 1; refresh(player, regionId, subRegionId) }
-            Slots.BACK -> RegionConditionScannerGui.open(player, regionId, subRegionId, 0)
+            Slots.PREV -> if (page > 0) { playerPages[player] = page - 1; refresh(player, regionId) }
+            Slots.NEXT -> if ((page + 1) * PAGE_SIZE < conditions.size) { playerPages[player] = page + 1; refresh(player, regionId) }
+            Slots.BACK -> RegionConditionScannerGui.open(player, regionId, 0)
             in 0 until PAGE_SIZE -> {
                 val idx = page * PAGE_SIZE + ctx.slotIndex
-                if (idx < conditions.size) toggleCondition(player, regionId, subRegionId, conditions[idx])
+                if (idx < conditions.size) toggleCondition(player, regionId, conditions[idx])
             }
         }
     }
 
-    private fun toggleCondition(player: ServerPlayerEntity, regionId: String, subRegionId: String?, condition: String) {
-        val restr = RegionsConfig.getRestriction(regionId, subRegionId) ?: return
+    private fun toggleCondition(player: ServerPlayerEntity, regionId: String, condition: String) {
+        val restr = RegionsConfig.getRestriction(regionId) ?: return
 
         // TARGET: exclusionConditions instead of disallowedSpecies
         if (restr.exclusionConditions.contains(condition)) {
@@ -70,20 +70,20 @@ object RegionConditionSelectorGui {
         }
 
         RegionsConfig.saveRegion(regionId)
-        refresh(player, regionId, subRegionId)
+        refresh(player, regionId)
     }
 
-    private fun refresh(player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
-        CustomGui.refreshGui(player, buildLayout(player, regionId, subRegionId))
+    private fun refresh(player: ServerPlayerEntity, regionId: String) {
+        CustomGui.refreshGui(player, buildLayout(player, regionId))
     }
 
-    private fun buildLayout(player: ServerPlayerEntity, regionId: String, subRegionId: String?): List<ItemStack> {
+    private fun buildLayout(player: ServerPlayerEntity, regionId: String): List<ItemStack> {
         val layout = MutableList(54) { filler() }
         val conditions = playerConditions[player] ?: return layout
         val page = playerPages[player] ?: 0
 
         // CHECK AGAINST: exclusionConditions
-        val blocked = RegionsConfig.getRestriction(regionId, subRegionId)?.exclusionConditions ?: emptySet<String>()
+        val blocked = RegionsConfig.getRestriction(regionId)?.exclusionConditions ?: emptySet<String>()
 
         val start = page * PAGE_SIZE
         val end = minOf(start + PAGE_SIZE, conditions.size)

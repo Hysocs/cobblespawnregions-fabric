@@ -48,15 +48,15 @@ object RegionSpeciesBlocklistGui {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    fun open(player: ServerPlayerEntity, regionId: String, subRegionId: String?, page: Int = 0) {
+    fun open(player: ServerPlayerEntity, regionId: String, page: Int = 0) {
         playerPages[player] = page
-        val label = RegionsConfig.scopeLabel(regionId, subRegionId)
+        val label = RegionsConfig.scopeLabel(regionId)
 
         CustomGui.openGui(
             player,
             "Blocked Species — $label",
-            buildLayout(player, regionId, subRegionId),
-            { ctx -> handleClick(ctx, player, regionId, subRegionId) },
+            buildLayout(player, regionId),
+            { ctx -> handleClick(ctx, player, regionId) },
             {
                 playerPages.remove(player)
                 playerSortMethods.remove(player)
@@ -77,18 +77,17 @@ object RegionSpeciesBlocklistGui {
     private fun handleClick(
         ctx: InteractionContext,
         player: ServerPlayerEntity,
-        regionId: String,
-        subRegionId: String?
+        regionId: String
     ) {
         when (ctx.slotIndex) {
             Slots.PREV -> {
                 val page = (playerPages[player] ?: 0) - 1
-                if (page >= 0) { playerPages[player] = page; refresh(player, regionId, subRegionId) }
+                if (page >= 0) { playerPages[player] = page; refresh(player, regionId) }
             }
             Slots.NEXT -> {
                 val page  = (playerPages[player] ?: 0) + 1
-                val total = getSpeciesForPlayer(player, regionId, subRegionId).size
-                if (page * PAGE_SIZE < total) { playerPages[player] = page; refresh(player, regionId, subRegionId) }
+                val total = getSpeciesForPlayer(player, regionId).size
+                if (page * PAGE_SIZE < total) { playerPages[player] = page; refresh(player, regionId) }
             }
             Slots.SORT -> when (ctx.button) {
                 // Left-click: cycle sort method
@@ -102,44 +101,44 @@ object RegionSpeciesBlocklistGui {
                     playerSortMethods[player] = next
                     if (next != BlocklistSortMethod.SEARCH) playerSearchTerms.remove(player)
                     playerPages[player] = 0
-                    refresh(player, regionId, subRegionId)
+                    refresh(player, regionId)
                 }
                 // Right-click: open search
-                1 -> RegionSpeciesSearchGui.open(player, regionId, subRegionId)
+                1 -> RegionSpeciesSearchGui.open(player, regionId)
             }
-            Slots.BACK -> RegionNaturalSpawnGui.open(player, regionId, subRegionId)
+            Slots.BACK -> RegionNaturalSpawnGui.open(player, regionId)
 
-            in 0 until PAGE_SIZE -> toggleSpecies(ctx.slotIndex, player, regionId, subRegionId)
+            in 0 until PAGE_SIZE -> toggleSpecies(ctx.slotIndex, player, regionId)
         }
     }
 
-    private fun toggleSpecies(slot: Int, player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
+    private fun toggleSpecies(slot: Int, player: ServerPlayerEntity, regionId: String) {
         val page    = playerPages[player] ?: 0
-        val species = getSpeciesForPlayer(player, regionId, subRegionId)
+        val species = getSpeciesForPlayer(player, regionId)
         val idx     = page * PAGE_SIZE + slot
         if (idx >= species.size) return
 
         val id    = species[idx].resourceIdentifier.toString()
-        val restr = RegionsConfig.getRestriction(regionId, subRegionId) ?: return
+        val restr = RegionsConfig.getRestriction(regionId) ?: return
 
         if (restr.disallowedSpecies.contains(id)) restr.disallowedSpecies.remove(id)
         else restr.disallowedSpecies.add(id)
 
         RegionsConfig.saveRegion(regionId)
-        refresh(player, regionId, subRegionId)
+        refresh(player, regionId)
     }
 
-    private fun refresh(player: ServerPlayerEntity, regionId: String, subRegionId: String?) {
-        CustomGui.refreshGui(player, buildLayout(player, regionId, subRegionId))
+    private fun refresh(player: ServerPlayerEntity, regionId: String) {
+        CustomGui.refreshGui(player, buildLayout(player, regionId))
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────
 
-    private fun buildLayout(player: ServerPlayerEntity, regionId: String, subRegionId: String?): List<ItemStack> {
+    private fun buildLayout(player: ServerPlayerEntity, regionId: String): List<ItemStack> {
         val layout  = MutableList(54) { filler() }
         val page    = playerPages[player] ?: 0
-        val blocked = RegionsConfig.getRestriction(regionId, subRegionId)?.disallowedSpecies ?: return layout
-        val species = getSpeciesForPlayer(player, regionId, subRegionId)
+        val blocked = RegionsConfig.getRestriction(regionId)?.disallowedSpecies ?: return layout
+        val species = getSpeciesForPlayer(player, regionId)
         val total   = species.size
 
         val start = page * PAGE_SIZE
@@ -162,12 +161,11 @@ object RegionSpeciesBlocklistGui {
 
     private fun getSpeciesForPlayer(
         player: ServerPlayerEntity,
-        regionId: String,
-        subRegionId: String?
+        regionId: String
     ): List<Species> {
         val sort   = playerSortMethods.getOrDefault(player, BlocklistSortMethod.ALPHABETICAL)
         val search = playerSearchTerms.getOrDefault(player, "")
-        val blocked = RegionsConfig.getRestriction(regionId, subRegionId)?.disallowedSpecies ?: return emptyList()
+        val blocked = RegionsConfig.getRestriction(regionId)?.disallowedSpecies ?: return emptyList()
 
         return when (sort) {
             BlocklistSortMethod.ALPHABETICAL -> allSpecies

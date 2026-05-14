@@ -26,7 +26,7 @@ enum class RegionSortMethod { ALPHABETICAL, TYPE, SELECTED, SEARCH }
  * Full-screen Pokémon picker for a region's unnatural spawn list.
  *
  * Left-click  → toggle a Pokémon in / out of the region's [selectedPokemon].
- * Right-click → (future: per-Pokémon settings — not implemented yet).
+ * Right-click → opens the selected Pokémon's per-entry settings.
  * Sort button → left-click cycles sort method; right-click opens search anvil.
  *
  * Navigation:
@@ -118,10 +118,16 @@ object RegionPokemonSelectionGui {
         val region = RegionsConfig.getRegion(regionId) ?: return
 
         when (ctx.slotIndex) {
-            Slots.PREV -> if (page > 0) open(player, regionId, page - 1)
+            Slots.PREV -> if (page > 0) {
+                playerPages[player] = page - 1
+                refresh(player, regionId)
+            }
             Slots.NEXT -> {
                 val total = getTotalVariantsCount(region.selectedPokemon)
-                if ((page + 1) * Constants.PAGE_SIZE < total) open(player, regionId, page + 1)
+                if ((page + 1) * Constants.PAGE_SIZE < total) {
+                    playerPages[player] = page + 1
+                    refresh(player, regionId)
+                }
             }
             Slots.SORT -> handleSortClick(ctx, player, regionId)
             Slots.BACK -> RegionUnnaturalSpawnGui.open(player, regionId)
@@ -139,11 +145,11 @@ object RegionPokemonSelectionGui {
                 }
                 if (sortMethod != RegionSortMethod.SEARCH) searchTerm = ""
                 if (sortMethod != RegionSortMethod.SELECTED) invalidateCache()
+                playerPages[player] = 0
                 refresh(player, regionId)
                 player.sendMessage(Text.literal("§7[CSR] Sort: ${sortMethod.name}"), false)
             }
             ClickType.RIGHT -> RegionPokemonSearchGui.open(player, regionId)
-            else             -> {}
         }
     }
 
@@ -162,7 +168,6 @@ object RegionPokemonSelectionGui {
                     RegionPokemonEntryGui.open(player, regionId, species.showdownId(), formName, aspects)
                 }
             }
-            else -> {}
         }
     }
 

@@ -56,7 +56,7 @@ object SpawnPointScanner {
 
     /**
      * Enqueue all currently-loaded chunks that overlap [region].
-     * Call after [SpawnPointStore.clearRegion] (region create, sub-region add, reload).
+     * Call after [SpawnPointStore.clearRegion] (region create, reload).
      */
     fun enqueueLoadedChunks(regionId: String, region: RegionData, server: MinecraftServer) {
         val worldKey = RegistryKey.of(
@@ -134,12 +134,17 @@ object SpawnPointScanner {
 
                 val floorPos = BlockPos(x, feetY - 1, z)
                 val feetPos  = BlockPos(x, feetY,     z)
+                val airPos   = feetPos.up()
 
                 val floorState = world.getBlockState(floorPos)
                 val feetState  = world.getBlockState(feetPos)
+                val airState   = world.getBlockState(airPos)
 
                 if (!floorState.getCollisionShape(world, floorPos).isEmpty && feetState.isAir) {
                     floors.add(SpawnFloor(feetPos, floorState.block, SpawnType.SOLID))
+                    if ((useHeightmap || airPos.y <= fixedMaxY) && airState.isAir) {
+                        floors.add(SpawnFloor(airPos, net.minecraft.block.Blocks.AIR, SpawnType.AIR))
+                    }
                 }
             }
         }

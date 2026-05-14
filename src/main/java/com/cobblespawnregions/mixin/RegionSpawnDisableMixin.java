@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Intercepts Cobblemon's PlayerSpawner before it builds a spawn zone.
- * If the player is standing inside a region (or sub-region) whose
+ * If the player is standing inside a region whose
  * spawnRestrictions.disableAll = true, we return null — the same signal
  * the vanilla spawner uses to skip the tick entirely.
  *
