@@ -54,7 +54,7 @@ dependencies {
 
     // Your added dependencies
     modImplementation("com.cobblemon:fabric:1.7.3+1.21.1")
-    modCompileOnly(files("libs/everlastingutils-1.1.5.jar"))
+    modCompileOnly(files("libs/everlastingutils-1.1.6.jar"))
 }
 
 tasks.processResources {

@@ -81,7 +81,7 @@ object SpawnPointScanner {
 
     /** Enqueue loaded chunks for every region. Call after [SpawnPointStore.clearAll]. */
     fun enqueueAllLoadedChunks(server: MinecraftServer) {
-        RegionsConfig.regions.values.forEach { region ->
+        RegionsConfig.allRegions().forEach { region ->
             enqueueLoadedChunks(region.regionId, region, server)
         }
     }

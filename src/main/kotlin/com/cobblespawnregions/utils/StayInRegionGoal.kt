@@ -15,6 +15,11 @@ class StayInRegionGoal(
 
     private var targetPos: Vec3d? = null
     private var ticksSinceCheck = entity.random.nextInt(settings.tickDelay.coerceAtLeast(1))
+    private var nextPathAttemptTick = 0L
+    private var cachedRegion: RegionData? = null
+    private var lastDistanceToTargetSq = Double.MAX_VALUE
+    private var stuckTicks = 0
+    private var lastRepathTick = 0L
 
     init {
         controls = EnumSet.of(Control.MOVE)
@@ -22,6 +27,7 @@ class StayInRegionGoal(
 
     override fun canStart(): Boolean {
         if (!settings.enabled) return false
+        if (entity.world.time < nextPathAttemptTick) return false
 
         val delay = settings.tickDelay.coerceAtLeast(1)
         if (--ticksSinceCheck > 0) return false
@@ -31,13 +37,15 @@ class StayInRegionGoal(
         val dimension = entity.world.registryKey.value.toString()
         if (region.dimension != dimension) return false
 
-        return !RegionsConfig.contains(region, entity.blockPos)
+        val outside = !RegionsConfig.contains(region, entity.blockPos)
+        if (!outside) return false
+
+        cachedRegion = region
+        return true
     }
 
     override fun start() {
-        entity.navigation.stop()
-
-        val region = RegionsConfig.getRegion(regionId) ?: return
+        val region = cachedRegion ?: RegionsConfig.getRegion(regionId) ?: return
         targetPos = if (settings.returnTarget.equals("CENTER", ignoreCase = true)) {
             centerTarget(region)
         } else {
@@ -45,21 +53,79 @@ class StayInRegionGoal(
         }
 
         val target = targetPos ?: return
-        val path = entity.navigation.findPathTo(target.x, target.y, target.z, 0)
-        if (path != null) {
-            entity.navigation.startMovingAlong(path, settings.speed.coerceAtLeast(0.05))
+        lastDistanceToTargetSq = Double.MAX_VALUE
+        stuckTicks = 0
+        if (!startPathTo(target)) {
+            nextPathAttemptTick = entity.world.time + (settings.tickDelay.coerceAtLeast(1) * 4).coerceAtLeast(40)
         }
     }
 
     override fun shouldContinue(): Boolean {
         if (!settings.enabled) return false
-        val region = RegionsConfig.getRegion(regionId) ?: return false
-        return !entity.navigation.isIdle && !RegionsConfig.contains(region, entity.blockPos)
+        val region = cachedRegion ?: RegionsConfig.getRegion(regionId)?.also { cachedRegion = it } ?: return false
+        return !RegionsConfig.contains(region, entity.blockPos)
+    }
+
+    override fun tick() {
+        val region = cachedRegion ?: RegionsConfig.getRegion(regionId)?.also { cachedRegion = it } ?: return
+        if (RegionsConfig.contains(region, entity.blockPos)) return
+
+        val target = targetPos ?: centerTarget(region).also { targetPos = it }
+        val now = entity.world.time
+        val distanceSq = target.squaredDistanceTo(entity.pos)
+
+        if (entity.navigation.isIdle) {
+            repath(region, now, chooseNewTarget = false)
+            return
+        }
+
+        if (distanceSq + 0.25 < lastDistanceToTargetSq) {
+            lastDistanceToTargetSq = distanceSq
+            stuckTicks = 0
+            return
+        }
+
+        stuckTicks++
+        if (stuckTicks >= STUCK_REPATH_TICKS) {
+            repath(region, now, chooseNewTarget = true)
+        }
     }
 
     override fun stop() {
         targetPos = null
         entity.navigation.stop()
+        lastDistanceToTargetSq = Double.MAX_VALUE
+        stuckTicks = 0
+    }
+
+    private fun repath(region: RegionData, now: Long, chooseNewTarget: Boolean) {
+        if (now - lastRepathTick < REPATH_COOLDOWN_TICKS) return
+
+        val target = if (chooseNewTarget && !settings.returnTarget.equals("CENTER", ignoreCase = true)) {
+            randomTarget(region) ?: centerTarget(region)
+        } else {
+            targetPos ?: centerTarget(region)
+        }
+        targetPos = target
+
+        if (startPathTo(target)) {
+            lastRepathTick = now
+            lastDistanceToTargetSq = target.squaredDistanceTo(entity.pos)
+            stuckTicks = 0
+        } else {
+            lastRepathTick = now
+            nextPathAttemptTick = now + REPATH_COOLDOWN_TICKS
+        }
+    }
+
+    private fun startPathTo(target: Vec3d): Boolean {
+        val path = entity.navigation.findPathTo(target.x, target.y, target.z, 0) ?: return false
+        entity.navigation.stop()
+        entity.navigation.startMovingAlong(path, settings.speed.coerceAtLeast(0.05))
+        nextPathAttemptTick = entity.world.time + settings.tickDelay.coerceAtLeast(1)
+        lastRepathTick = entity.world.time
+        lastDistanceToTargetSq = target.squaredDistanceTo(entity.pos)
+        return true
     }
 
     private fun randomTarget(region: RegionData): Vec3d? {
@@ -87,5 +153,10 @@ class StayInRegionGoal(
         val z = (region.pos1.z + region.pos2.z) / 2
         val y = entity.world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z)
         return Vec3d.ofBottomCenter(BlockPos(x, y, z))
+    }
+
+    private companion object {
+        private const val STUCK_REPATH_TICKS = 30
+        private const val REPATH_COOLDOWN_TICKS = 20L
     }
 }

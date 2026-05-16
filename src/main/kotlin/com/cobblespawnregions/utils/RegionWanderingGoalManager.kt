@@ -31,7 +31,7 @@ object RegionWanderingGoalManager {
         }
 
         (entity as MobEntityAccessor).`cobblespawnregions$getGoalSelector`()
-            .add(2, StayInRegionGoal(entity as MobEntity, regionId, settings))
+            .add(0, StayInRegionGoal(entity as MobEntity, regionId, settings))
     }
 
     fun attachLoadedForEntry(server: MinecraftServer, regionId: String, entryKey: String) {

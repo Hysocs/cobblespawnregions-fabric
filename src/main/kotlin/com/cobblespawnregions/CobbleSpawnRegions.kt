@@ -61,13 +61,17 @@ object CobbleSpawnRegions : ModInitializer {
 
     val playerSelections = ConcurrentHashMap<UUID, PlayerSelection>()
     val activeVisualizations = ConcurrentHashMap<UUID, MutableSet<String>>()
+    val particleUpdatePlayers = ConcurrentHashMap.newKeySet<UUID>()
 
     @Volatile private var serverReady = false
+    @Volatile private var nextSpawnLoopCheckAtMs = 0L
+    private val dimensionKeyCache = ConcurrentHashMap<String, RegistryKey<World>>()
 
     override fun onInitialize() {
         logger.info("Initializing CobbleSpawnRegions")
 
         RegionsConfig.initializeAndLoad()
+        RegionEntityTracker.loadFromDisk()
         RegionCommands.register()
         battleTracker.registerEvents()
         catchingTracker.registerEvents()
@@ -82,7 +86,7 @@ object CobbleSpawnRegions : ModInitializer {
 
             // ── Rebuild entity tracker from already-loaded entities ────────────
             // Covers entities that were alive before this server session started.
-            for (region in RegionsConfig.regions.values) {
+            for (region in RegionsConfig.allRegions()) {
                 val rWorld = server.getWorld(parseDimension(region.dimension)) ?: continue
                 val box    = RegionSpawnHelper.regionBoundingBox(region)
                 RegionEntityTracker.rebuildFromWorld(rWorld, region.regionId, box)
@@ -113,6 +117,13 @@ object CobbleSpawnRegions : ModInitializer {
                 processAllRegionSpawns(server)
             }
 
+            SchedulerManager.scheduleAtFixedRate(
+                "cobblespawnregions-tracker-save-loop",
+                server, 5L, 5L, TimeUnit.SECONDS
+            ) {
+                RegionEntityTracker.flushIfDirty()
+            }
+
             battleTracker.startCleanupScheduler(server)
         }
 
@@ -122,9 +133,12 @@ object CobbleSpawnRegions : ModInitializer {
             SchedulerManager.shutdown("cobblespawnregions-particle-loop")
             SchedulerManager.shutdown("cobblespawnregions-scan-loop")
             SchedulerManager.shutdown("cobblespawnregions-spawn-loop")
+            SchedulerManager.shutdown("cobblespawnregions-tracker-save-loop")
             SchedulerManager.shutdown("cobblespawnregions-battle-cleanup")
+            RegionEntityTracker.flushIfDirty()
             playerSelections.clear()
             activeVisualizations.clear()
+            particleUpdatePlayers.clear()
             SpawnPointStore.clearAll()
             RegionEntityTracker.clearAll()
             RegionWanderingGoalManager.clearAll()
@@ -136,8 +150,9 @@ object CobbleSpawnRegions : ModInitializer {
 
             val dim      = world.registryKey.value.toString()
             val chunkPos = chunk.pos
+            RegionEntityTracker.markChunkLoaded(world, chunkPos)
 
-            RegionsConfig.regions.values.forEach { region ->
+            RegionsConfig.allRegions().forEach { region ->
                 if (region.dimension != dim) return@forEach
 
                 val rMinCX = minOf(region.pos1.x, region.pos2.x) shr 4
@@ -153,7 +168,16 @@ object CobbleSpawnRegions : ModInitializer {
                 // Re-populate tracker with entities returning from hibernation
                 val box = RegionSpawnHelper.regionBoundingBox(region)
                 RegionEntityTracker.rebuildFromWorld(world, region.regionId, box)
+                world.server.execute {
+                    RegionEntityTracker.reconcileLoadedChunk(world, region.regionId, chunkPos)
+                }
             }
+        }
+
+        ServerChunkEvents.CHUNK_UNLOAD.register { world, chunk ->
+            if (!serverReady) return@register
+            if (world !is ServerWorld) return@register
+            RegionEntityTracker.markChunkUnloading(world, chunk.pos)
         }
 
         // ── Entity removal listener ────────────────────────────────────────────
@@ -168,7 +192,15 @@ object CobbleSpawnRegions : ModInitializer {
         ServerEntityEvents.ENTITY_UNLOAD.register { entity, _ ->
             if (entity !is PokemonEntity) return@register
             RegionWanderingGoalManager.forget(entity.uuid)
-            val reason = entity.removalReason ?: return@register
+            val chunkIsUnloading = RegionEntityTracker.isChunkUnloading(entity)
+            val reason = entity.removalReason
+            if (chunkIsUnloading) {
+                RegionEntityTracker.forgetLiveUuid(entity.uuid)
+                // The entity is being saved with its chunk. Keep its spawn id
+                // counted so distant parts of a large region cannot refill.
+                return@register
+            }
+            if (reason == null) return@register
             when (reason) {
                 Entity.RemovalReason.UNLOADED_TO_CHUNK,
                 Entity.RemovalReason.UNLOADED_WITH_PLAYER -> {
@@ -195,26 +227,50 @@ object CobbleSpawnRegions : ModInitializer {
     // ── Spawn driver ──────────────────────────────────────────────────────────
 
     private fun processAllRegionSpawns(server: MinecraftServer) {
-        for (region in RegionsConfig.regions.values) {
+        val now = System.currentTimeMillis()
+        if (now < nextSpawnLoopCheckAtMs) return
+
+        var nextDueAt = Long.MAX_VALUE
+        var hasActiveRegion = false
+
+        for (region in RegionsConfig.allRegions()) {
             if (region.selectedPokemon.isEmpty()) continue
-            if (!RegionSpawnHelper.isSpawnReady(region.regionId)) continue
+            hasActiveRegion = true
+
+            val dueAt = RegionSpawnHelper.nextSpawnDueAt(region)
+            if (now < dueAt) {
+                if (dueAt < nextDueAt) nextDueAt = dueAt
+                continue
+            }
 
             val world = server.getWorld(parseDimension(region.dimension)) ?: continue
             try {
-                RegionSpawnHelper.attemptSpawnInRegion(world, region.regionId)
+                RegionSpawnHelper.attemptSpawnInRegion(world, region, respectTimer = false)
+                val nextRegionDueAt = RegionSpawnHelper.nextSpawnDueAt(region)
+                if (nextRegionDueAt < nextDueAt) nextDueAt = nextRegionDueAt
             } catch (e: Exception) {
                 logger.error("Error spawning for region '${region.regionId}'", e)
             }
         }
+
+        nextSpawnLoopCheckAtMs = when {
+            nextDueAt != Long.MAX_VALUE -> nextDueAt
+            hasActiveRegion -> now + 1_000L
+            else -> now + 5_000L
+        }
     }
 
     private fun parseDimension(str: String): RegistryKey<World> {
+        dimensionKeyCache[str]?.let { return it }
         val parts = str.split(":")
-        if (parts.size != 2) {
+        val key = if (parts.size != 2) {
             logger.warn("Invalid dimension '$str', using 'minecraft:overworld'")
-            return RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"))
+            RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"))
+        } else {
+            RegistryKey.of(RegistryKeys.WORLD, Identifier.of(parts[0], parts[1]))
         }
-        return RegistryKey.of(RegistryKeys.WORLD, Identifier.of(parts[0], parts[1]))
+        dimensionKeyCache[str] = key
+        return key
     }
 
     // ── Stick interactions ───────────────────────────────────────────────────
@@ -245,6 +301,7 @@ object CobbleSpawnRegions : ModInitializer {
             }
 
             logDebug("${player.name.string} [${mode.name}] first point = $pos", MOD_ID)
+            requestParticleUpdate(player.uuid)
             sendStatus(player, sel)
             ActionResult.SUCCESS
         }
@@ -274,8 +331,20 @@ object CobbleSpawnRegions : ModInitializer {
             }
 
             logDebug("${player.name.string} [${mode.name}] second point = $pos", MOD_ID)
+            requestParticleUpdate(player.uuid)
             sendStatus(player, sel)
             ActionResult.SUCCESS
+        }
+    }
+
+    fun requestParticleUpdate(uuid: UUID) {
+        particleUpdatePlayers.add(uuid)
+    }
+
+    fun requestParticleUpdate(player: ServerPlayerEntity, reason: String, logRequest: Boolean = false) {
+        particleUpdatePlayers.add(player.uuid)
+        if (logRequest) {
+            logger.info("[CSR-VISUAL] ${player.name.string} (${player.uuid}) requested visual update: $reason")
         }
     }
 

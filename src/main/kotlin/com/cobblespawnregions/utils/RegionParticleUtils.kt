@@ -49,12 +49,39 @@ object RegionParticleUtils {
 
     private const val SPAWN_PARTICLE_RADIUS_SQ = 25.0 * 25.0
 
+    private data class RegionVisualPalette(
+        val face: BlockState,
+        val frame: BlockState,
+        val edge: BlockState
+    )
+
+    private val priorityPalettes = listOf(
+        RegionVisualPalette(Blocks.RED_STAINED_GLASS.defaultState, Blocks.RED_CONCRETE.defaultState, Blocks.RED_CONCRETE.defaultState),
+        RegionVisualPalette(Blocks.ORANGE_STAINED_GLASS.defaultState, Blocks.ORANGE_CONCRETE.defaultState, Blocks.ORANGE_CONCRETE.defaultState),
+        RegionVisualPalette(Blocks.YELLOW_STAINED_GLASS.defaultState, Blocks.YELLOW_CONCRETE.defaultState, Blocks.YELLOW_CONCRETE.defaultState),
+        RegionVisualPalette(Blocks.LIME_STAINED_GLASS.defaultState, Blocks.LIME_CONCRETE.defaultState, Blocks.LIME_CONCRETE.defaultState),
+        RegionVisualPalette(Blocks.GREEN_STAINED_GLASS.defaultState, Blocks.GREEN_CONCRETE.defaultState, Blocks.GREEN_CONCRETE.defaultState)
+    )
+
     // ── Main update loop ───────────────────────────────────────────────────────
 
     fun updateParticles(server: MinecraftServer) {
-        val playersToUpdate = mutableSetOf<UUID>()
+        val playersToCheck = HashSet<UUID>()
+        playersToCheck.addAll(CobbleSpawnRegions.particleUpdatePlayers)
+        playersToCheck.addAll(activeVisualStates.keys)
+        if (playersToCheck.isEmpty()) return
 
-        server.playerManager.playerList.forEach { player ->
+        val playersToUpdate = mutableSetOf<UUID>()
+        var priorityIndexCache: Map<String, Int>? = null
+
+        playersToCheck.forEach { uuid ->
+            val player = server.playerManager.getPlayer(uuid)
+            if (player == null) {
+                CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
+                activeVisualStates.remove(uuid)
+                return@forEach
+            }
+
             val requests = mutableListOf<BoxRequest>()
 
             val sel = CobbleSpawnRegions.playerSelections[player.uuid]
@@ -66,11 +93,21 @@ object RegionParticleUtils {
             val regionIds = CobbleSpawnRegions.activeVisualizations[player.uuid]
             if (regionIds != null) {
                 val missing = mutableListOf<String>()
+                val priorityIndex = priorityIndexCache ?: RegionsConfig.regionsInPriorityOrder()
+                    .mapIndexed { index, region -> region.regionId to index }
+                    .toMap()
+                    .also { priorityIndexCache = it }
+                val priorityRegionCount = priorityIndex.size
                 regionIds.forEach { regionId ->
                     val region = RegionsConfig.getRegion(regionId)
                     if (region != null) {
                         playersToUpdate.add(player.uuid)
-                        buildRegionRequests(player, region, requests)
+                        buildRegionRequests(
+                            region,
+                            priorityIndex[region.regionId] ?: 0,
+                            priorityRegionCount,
+                            requests
+                        )
                         spawnPointParticles(player, regionId)
                     } else {
                         missing.add(regionId)
@@ -100,6 +137,13 @@ object RegionParticleUtils {
                     entry.value.clear(player)
                 }
                 it.remove()
+                CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
+            }
+        }
+
+        playersToCheck.forEach { uuid ->
+            if (uuid !in playersToUpdate && !activeVisualStates.containsKey(uuid)) {
+                CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
             }
         }
     }
@@ -325,16 +369,29 @@ object RegionParticleUtils {
         }
     }
 
-    private fun buildRegionRequests(player: ServerPlayerEntity, region: RegionData, requests: MutableList<BoxRequest>) {
+    private fun buildRegionRequests(
+        region: RegionData,
+        priorityRank: Int,
+        priorityRegionCount: Int,
+        requests: MutableList<BoxRequest>
+    ) {
         val rMinX = minOf(region.pos1.x, region.pos2.x).toDouble()
         val rMinY = minOf(region.pos1.y, region.pos2.y).toDouble()
         val rMinZ = minOf(region.pos1.z, region.pos2.z).toDouble()
         val rMaxX = maxOf(region.pos1.x, region.pos2.x).toDouble() + 1.0
         val rMaxY = maxOf(region.pos1.y, region.pos2.y).toDouble() + 1.0
         val rMaxZ = maxOf(region.pos1.z, region.pos2.z).toDouble() + 1.0
+        val palette = priorityPalette(priorityRank, priorityRegionCount)
 
-        drawHollowBox(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, Blocks.LIME_STAINED_GLASS.defaultState, Blocks.LIME_CONCRETE.defaultState, requests)
-        drawWireframeEdges(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, Blocks.RED_CONCRETE.defaultState, requests = requests)
+        drawHollowBox(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, palette.face, palette.frame, requests)
+        drawWireframeEdges(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ, palette.edge, requests = requests)
 
+    }
+
+    private fun priorityPalette(priorityRank: Int, priorityRegionCount: Int): RegionVisualPalette {
+        if (priorityRegionCount <= 1) return priorityPalettes.first()
+        val clampedRank = priorityRank.coerceIn(0, priorityRegionCount - 1)
+        val paletteIndex = clampedRank * (priorityPalettes.size - 1) / (priorityRegionCount - 1)
+        return priorityPalettes[paletteIndex.coerceIn(priorityPalettes.indices)]
     }
 }

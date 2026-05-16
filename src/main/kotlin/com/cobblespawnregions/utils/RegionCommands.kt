@@ -2,8 +2,8 @@ package com.cobblespawnregions.utils
 
 import com.cobblespawnregions.CobbleSpawnRegions
 import com.cobblespawnregions.StickMode
-import com.cobblespawnregions.gui.RegionListGui
 import com.cobblespawnregions.gui.RegionEditorGui
+import com.cobblespawnregions.gui.RegionListGui
 import com.everlastingutils.command.CommandManager
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -24,8 +24,6 @@ object RegionCommands {
 
     fun register() {
         manager.command("csr") {
-
-            // ── /csr giveclaimstick <coords|chunk> ────────────────────────────
             subcommand("giveclaimstick") {
                 then(
                     RequiredArgumentBuilder.argument<ServerCommandSource, String>("mode", StringArgumentType.word())
@@ -44,154 +42,20 @@ object RegionCommands {
                 )
             }
 
-            // ── /csr region ... ───────────────────────────────────────────────
+            registerFlatRegionCommands()
+
             subcommand("region") {
-
-                // /csr region create <name>
-                subcommand("create") {
-                    then(nameArg().executes { ctx ->
-                        val player = playerOrError(ctx.source) ?: return@executes 0
-                        createRegion(player, ctx.source, StringArgumentType.getString(ctx, "name"))
-                    })
-                }
-
-                // /csr region list
-                subcommand("list") {
-                    executes { ctx ->
-                        val regions = RegionsConfig.regions
-                        if (regions.isEmpty()) {
-                            ctx.source.sendMessage(Text.literal("§a[CSR] §fNo regions defined yet."))
-                        } else {
-                            ctx.source.sendMessage(Text.literal("§a[CSR] §f${regions.size} region(s):"))
-                            RegionsConfig.regionsInPriorityOrder().forEach { r ->
-                                ctx.source.sendMessage(Text.literal(
-                                    "§7 - §e${r.regionName} §8(${r.regionId}) §7[${r.mode}] " +
-                                            "§f(${r.pos1.x},${r.pos1.y},${r.pos1.z}) → (${r.pos2.x},${r.pos2.y},${r.pos2.z}) " +
-                                            "§7| priority §f${r.priority} §7| ${r.dimension}"
-                                ))
-                            }
-                        }
-                        1
-                    }
-                }
-
-                // /csr region delete <regionId>
-                subcommand("delete") {
-                    then(regionIdArg().executes { ctx ->
-                        val id = StringArgumentType.getString(ctx, "regionId")
-                        if (RegionsConfig.removeRegion(id)) {
-                            CobbleSpawnRegions.activeVisualizations.entries.removeIf { entry ->
-                                entry.value.remove(id)
-                                entry.value.isEmpty()
-                            }
-                            // Evict cached spawn floors so memory isn't held for a deleted region.
-                            SpawnPointStore.clearRegion(id)
-                            ctx.source.sendMessage(Text.literal("§a[CSR] §fDeleted region §e$id§f."))
-                            1
-                        } else {
-                            ctx.source.sendError(Text.literal("No region found with id '$id'.")); 0
-                        }
-                    })
-                }
-
-                // /csr region visualize <regionId>
-                subcommand("visualize") {
-                    then(regionIdArg().executes { ctx ->
-                        val player = playerOrError(ctx.source) ?: return@executes 0
-                        val id     = StringArgumentType.getString(ctx, "regionId")
-                        val region = RegionsConfig.getRegion(id) ?: run {
-                            ctx.source.sendError(Text.literal("No region found with id '$id'.")); return@executes 0
-                        }
-                        val visualizations = CobbleSpawnRegions.activeVisualizations
-                            .computeIfAbsent(player.uuid) { ConcurrentHashMap.newKeySet() }
-                        if (visualizations.remove(id)) {
-                            if (visualizations.isEmpty()) {
-                                CobbleSpawnRegions.activeVisualizations.remove(player.uuid)
-                            }
-                            player.sendMessage(Text.literal("§a[CSR] §fStopped visualising §e${region.regionName}§f."), false)
-                        } else {
-                            visualizations.add(id)
-                            player.sendMessage(Text.literal(
-                                "§a[CSR] §fVisualising §e${region.regionName} §7(priority ${region.priority})§f."
-                            ), false)
-                        }
-                        1
-                    })
-                }
-
-                // /csr region editgui <regionId>
-                subcommand("editgui") {
-                    then(regionIdArg().executes { ctx ->
-                        val player = playerOrError(ctx.source) ?: return@executes 0
-                        val id     = StringArgumentType.getString(ctx, "regionId")
-                        val region = RegionsConfig.getRegion(id) ?: run {
-                            ctx.source.sendError(Text.literal("No region found with id '$id'.")); return@executes 0
-                        }
-                        RegionEditorGui.open(player, id)
-                        player.sendMessage(Text.literal("§a[CSR] §fOpened editor for §e${region.regionName}§f."), false)
-                        1
-                    })
-                }
-
-                // /csr region priority <regionId> <value>
-                subcommand("priority") {
-                    then(regionIdArg()
-                        .then(RequiredArgumentBuilder.argument<ServerCommandSource, Int>("value", IntegerArgumentType.integer(-1000, 1000))
-                            .executes { ctx ->
-                                val id = StringArgumentType.getString(ctx, "regionId")
-                                val value = IntegerArgumentType.getInteger(ctx, "value")
-                                val region = RegionsConfig.updateRegion(id) { it.priority = value } ?: run {
-                                    ctx.source.sendError(Text.literal("No region found with id '$id'.")); return@executes 0
-                                }
-                                ctx.source.sendMessage(Text.literal(
-                                    "§a[CSR] §fSet §e${region.regionName} §fpriority to §b${region.priority}§f."
-                                ))
-                                1
-                            }
-                        )
-                    )
-                }
+                registerLegacyRegionCommands()
             }
 
-            // ── /csr check ────────────────────────────────────────────────────
             subcommand("check") {
-                executes { ctx ->
-                    val player = playerOrError(ctx.source) ?: return@executes 0
-                    val pos    = player.blockPos
-                    val dim    = player.serverWorld.registryKey.value.toString()
-
-                    val matches = RegionsConfig.regionsAt(pos, dim)
-                    val region = matches.firstOrNull()
-
-                    if (region == null) {
-                        player.sendMessage(Text.literal("§a[CSR] §fYou are §cnot §finside any region."), false)
-                        return@executes 1
-                    }
-
-                    val restr = region.spawnRestrictions
-                    player.sendMessage(Text.literal("§a[CSR] §fControlling region: §e${region.regionName} §8(${region.regionId}) §7priority §f${region.priority}"), false)
-                    if (matches.size > 1) {
-                        player.sendMessage(Text.literal("§a[CSR] §fOverlaps here: §7" +
-                                matches.drop(1).joinToString(", ") { "${it.regionName}(${it.priority})" }), false)
-                    }
-                    player.sendMessage(Text.literal("§a[CSR] §fActive restrictions:"), false)
-                    player.sendMessage(Text.literal("§7  disableAll: ${flag(restr.disableAll)}"), false)
-                    player.sendMessage(Text.literal("§7  excludeOwnedPokemon: ${flag(restr.excludeOwnedPokemon)}"), false)
-                    player.sendMessage(Text.literal("§7  blockedSpecies (${restr.disallowedSpecies.size}): §f${restr.disallowedSpecies.joinToString(", ").ifEmpty { "none" }}"), false)
-                    1
-                }
+                executes { ctx -> checkCurrentRegion(ctx.source) }
             }
 
-            // ── /csr editgui ──────────────────────────────────────────────────
             subcommand("editgui") {
-                executes { ctx ->
-                    val player = playerOrError(ctx.source) ?: return@executes 0
-                    RegionListGui.open(player)
-                    1
-                }
+                executes { ctx -> openRegionList(ctx.source) }
             }
 
-            // ── /csr reload ───────────────────────────────────────────────────
             subcommand("reload") {
                 executes { ctx ->
                     RegionsConfig.reloadBlocking()
@@ -206,14 +70,223 @@ object RegionCommands {
         manager.register()
     }
 
-    // ── Command implementations ───────────────────────────────────────────────
+    private fun CommandManager.CommandConfig.registerFlatRegionCommands() {
+        subcommand("create") {
+            then(nameArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                createRegion(player, ctx.source, StringArgumentType.getString(ctx, "name"))
+            })
+        }
+
+        subcommand("list") {
+            executes { ctx -> listRegions(ctx.source) }
+        }
+
+        subcommand("delete") {
+            then(regionIdArg().executes { ctx ->
+                deleteRegion(ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("visualize") {
+            then(regionIdArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                toggleVisualization(player, ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("edit") {
+            then(regionIdArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                openRegionEditor(player, ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("priority") {
+            then(regionIdArg()
+                .then(RequiredArgumentBuilder.argument<ServerCommandSource, Int>("value", IntegerArgumentType.integer(-1000, 1000))
+                    .executes { ctx ->
+                        setRegionPriority(
+                            ctx.source,
+                            StringArgumentType.getString(ctx, "regionId"),
+                            IntegerArgumentType.getInteger(ctx, "value")
+                        )
+                    }
+                )
+            )
+        }
+
+        subcommand("gui") {
+            executes { ctx -> openRegionList(ctx.source) }
+        }
+    }
+
+    private fun CommandManager.SubcommandConfig.registerLegacyRegionCommands() {
+        subcommand("create") {
+            then(nameArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                createRegion(player, ctx.source, StringArgumentType.getString(ctx, "name"))
+            })
+        }
+
+        subcommand("list") {
+            executes { ctx -> listRegions(ctx.source) }
+        }
+
+        subcommand("delete") {
+            then(regionIdArg().executes { ctx ->
+                deleteRegion(ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("visualize") {
+            then(regionIdArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                toggleVisualization(player, ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("editgui") {
+            then(regionIdArg().executes { ctx ->
+                val player = playerOrError(ctx.source) ?: return@executes 0
+                openRegionEditor(player, ctx.source, StringArgumentType.getString(ctx, "regionId"))
+            })
+        }
+
+        subcommand("priority") {
+            then(regionIdArg()
+                .then(RequiredArgumentBuilder.argument<ServerCommandSource, Int>("value", IntegerArgumentType.integer(-1000, 1000))
+                    .executes { ctx ->
+                        setRegionPriority(
+                            ctx.source,
+                            StringArgumentType.getString(ctx, "regionId"),
+                            IntegerArgumentType.getInteger(ctx, "value")
+                        )
+                    }
+                )
+            )
+        }
+    }
+
+    private fun openRegionList(source: ServerCommandSource): Int {
+        val player = playerOrError(source) ?: return 0
+        RegionListGui.open(player)
+        return 1
+    }
+
+    private fun listRegions(source: ServerCommandSource): Int {
+        val regions = RegionsConfig.regions
+        if (regions.isEmpty()) {
+            source.sendMessage(Text.literal("§a[CSR] §fNo regions defined yet."))
+            return 1
+        }
+
+        source.sendMessage(Text.literal("§a[CSR] §f${regions.size} region(s):"))
+        RegionsConfig.regionsInPriorityOrder().forEach { r ->
+            source.sendMessage(Text.literal(
+                "§7 - §e${r.regionName} §8(${r.regionId}) §7[${r.mode}] " +
+                        "§f(${r.pos1.x},${r.pos1.y},${r.pos1.z}) -> (${r.pos2.x},${r.pos2.y},${r.pos2.z}) " +
+                        "§7| priority §f${r.priority} §7| ${r.dimension}"
+            ))
+        }
+        return 1
+    }
+
+    private fun deleteRegion(source: ServerCommandSource, regionId: String): Int {
+        if (!RegionsConfig.removeRegion(regionId)) {
+            source.sendError(Text.literal("No region found with id '$regionId'."))
+            return 0
+        }
+
+        val affectedPlayers = mutableListOf<java.util.UUID>()
+        CobbleSpawnRegions.activeVisualizations.entries.removeIf { entry ->
+            if (entry.value.remove(regionId)) affectedPlayers.add(entry.key)
+            entry.value.isEmpty()
+        }
+        affectedPlayers.forEach(CobbleSpawnRegions::requestParticleUpdate)
+        RegionEntityTracker.clearRegion(regionId)
+        SpawnPointStore.clearRegion(regionId)
+        source.sendMessage(Text.literal("§a[CSR] §fDeleted region §e$regionId§f."))
+        return 1
+    }
+
+    private fun toggleVisualization(player: ServerPlayerEntity, source: ServerCommandSource, regionId: String): Int {
+        val region = RegionsConfig.getRegion(regionId) ?: run {
+            source.sendError(Text.literal("No region found with id '$regionId'."))
+            return 0
+        }
+
+        val visualizations = CobbleSpawnRegions.activeVisualizations
+            .computeIfAbsent(player.uuid) { ConcurrentHashMap.newKeySet() }
+        if (visualizations.remove(regionId)) {
+            if (visualizations.isEmpty()) {
+                CobbleSpawnRegions.activeVisualizations.remove(player.uuid)
+            }
+            CobbleSpawnRegions.requestParticleUpdate(player, "stopped visualizing $regionId", logRequest = true)
+            player.sendMessage(Text.literal("§a[CSR] §fStopped visualizing §e${region.regionName}§f."), false)
+        } else {
+            visualizations.add(regionId)
+            CobbleSpawnRegions.requestParticleUpdate(player, "started visualizing $regionId", logRequest = true)
+            player.sendMessage(Text.literal(
+                "§a[CSR] §fVisualizing §e${region.regionName} §7(priority ${region.priority})§f."
+            ), false)
+        }
+        return 1
+    }
+
+    private fun openRegionEditor(player: ServerPlayerEntity, source: ServerCommandSource, regionId: String): Int {
+        val region = RegionsConfig.getRegion(regionId) ?: run {
+            source.sendError(Text.literal("No region found with id '$regionId'."))
+            return 0
+        }
+        RegionEditorGui.open(player, regionId)
+        player.sendMessage(Text.literal("§a[CSR] §fOpened editor for §e${region.regionName}§f."), false)
+        return 1
+    }
+
+    private fun setRegionPriority(source: ServerCommandSource, regionId: String, value: Int): Int {
+        val region = RegionsConfig.updateRegion(regionId) { it.priority = value } ?: run {
+            source.sendError(Text.literal("No region found with id '$regionId'."))
+            return 0
+        }
+        source.sendMessage(Text.literal(
+            "§a[CSR] §fSet §e${region.regionName} §fpriority to §b${region.priority}§f."
+        ))
+        return 1
+    }
+
+    private fun checkCurrentRegion(source: ServerCommandSource): Int {
+        val player = playerOrError(source) ?: return 0
+        val pos = player.blockPos
+        val dim = player.serverWorld.registryKey.value.toString()
+
+        val matches = RegionsConfig.regionsAt(pos, dim)
+        val region = matches.firstOrNull()
+
+        if (region == null) {
+            player.sendMessage(Text.literal("§a[CSR] §fYou are §cnot §finside any region."), false)
+            return 1
+        }
+
+        val restr = region.spawnRestrictions
+        player.sendMessage(Text.literal("§a[CSR] §fControlling region: §e${region.regionName} §8(${region.regionId}) §7priority §f${region.priority}"), false)
+        if (matches.size > 1) {
+            player.sendMessage(Text.literal("§a[CSR] §fOverlaps here: §7" +
+                    matches.drop(1).joinToString(", ") { "${it.regionName}(${it.priority})" }), false)
+        }
+        player.sendMessage(Text.literal("§a[CSR] §fActive restrictions:"), false)
+        player.sendMessage(Text.literal("§7  disableAll: ${flag(restr.disableAll)}"), false)
+        player.sendMessage(Text.literal("§7  excludeOwnedPokemon: ${flag(restr.excludeOwnedPokemon)}"), false)
+        player.sendMessage(Text.literal("§7  blockedSpecies (${restr.disallowedSpecies.size}): §f${restr.disallowedSpecies.joinToString(", ").ifEmpty { "none" }}"), false)
+        return 1
+    }
 
     private fun giveStick(player: ServerPlayerEntity, source: ServerCommandSource, mode: StickMode): Int {
         val stick = ItemStack(Items.STICK, 1)
 
         val (label, plainName) = when (mode) {
-            StickMode.CHUNK -> "§bChunk Claim Stick"  to "Chunk Claim Stick"
-            else            -> "§6Coords Claim Stick" to "Coords Claim Stick"
+            StickMode.CHUNK -> "§bChunk Claim Stick" to "Chunk Claim Stick"
+            else -> "§6Coords Claim Stick" to "Coords Claim Stick"
         }
         stick.set(DataComponentTypes.CUSTOM_NAME, Text.literal(label))
 
@@ -248,36 +321,39 @@ object RegionCommands {
         }
 
         val dimension = player.serverWorld.registryKey.value.toString()
-        val world     = player.serverWorld
+        val world = player.serverWorld
 
         val (p1, p2) = when (sel.mode) {
             StickMode.CHUNK -> {
-                val c1 = sel.chunkPos1!!; val c2 = sel.chunkPos2!!
+                val c1 = sel.chunkPos1!!
+                val c2 = sel.chunkPos2!!
                 SerializableBlockPos(minOf(c1.startX, c2.startX), world.bottomY, minOf(c1.startZ, c2.startZ)) to
                         SerializableBlockPos(maxOf(c1.endX, c2.endX), world.topY, maxOf(c1.endZ, c2.endZ))
             }
-            else -> SerializableBlockPos.fromBlockPos(sel.pos1!!) to
-                    SerializableBlockPos.fromBlockPos(sel.pos2!!)
+            else -> SerializableBlockPos.fromBlockPos(sel.pos1!!) to SerializableBlockPos.fromBlockPos(sel.pos2!!)
         }
 
         RegionsConfig.addRegion(
-            RegionData(regionId = regionId, regionName = name, pos1 = p1, pos2 = p2,
-                dimension = dimension, mode = sel.mode.name)
+            RegionData(
+                regionId = regionId,
+                regionName = name,
+                pos1 = p1,
+                pos2 = p2,
+                dimension = dimension,
+                mode = sel.mode.name
+            )
         )
         CobbleSpawnRegions.playerSelections.remove(player.uuid)
+        CobbleSpawnRegions.requestParticleUpdate(player.uuid)
 
-        // Scan any already-loaded chunks immediately; remaining chunks will be
-        // picked up automatically by the CHUNK_LOAD event as they load.
         SpawnPointScanner.enqueueLoadedChunks(regionId, RegionsConfig.getRegion(regionId)!!, source.server)
 
         player.sendMessage(Text.literal(
             "§a[CSR] §fRegion §e$name §f[${sel.mode.name}] created. " +
-                    "§b(${p1.x},${p1.y},${p1.z}) §f→ §b(${p2.x},${p2.y},${p2.z}) §7in $dimension"
+                    "§b(${p1.x},${p1.y},${p1.z}) §f-> §b(${p2.x},${p2.y},${p2.z}) §7in $dimension"
         ), false)
         return 1
     }
-
-    // ── Argument builders ─────────────────────────────────────────────────────
 
     private fun nameArg() =
         RequiredArgumentBuilder.argument<ServerCommandSource, String>("name", StringArgumentType.word())!!
@@ -289,21 +365,22 @@ object RegionCommands {
                 builder.buildFuture()
             }!!
 
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
     private fun parseStickMode(raw: String, source: ServerCommandSource): StickMode? =
         when (raw.lowercase()) {
-            "coords"    -> StickMode.COORDS
-            "chunk"     -> StickMode.CHUNK
-            else        -> { source.sendError(Text.literal("Unknown mode '$raw'. Use: coords, chunk.")); null }
+            "coords" -> StickMode.COORDS
+            "chunk" -> StickMode.CHUNK
+            else -> {
+                source.sendError(Text.literal("Unknown mode '$raw'. Use: coords, chunk."))
+                null
+            }
         }
 
     private fun sanitize(name: String) = name.lowercase().replace(Regex("[^a-z0-9_]"), "_")
 
     private fun playerOrError(source: ServerCommandSource): ServerPlayerEntity? {
-        val p = source.player
-        if (p == null) source.sendError(Text.literal("Only players can use this command."))
-        return p
+        val player = source.player
+        if (player == null) source.sendError(Text.literal("Only players can use this command."))
+        return player
     }
 }
 

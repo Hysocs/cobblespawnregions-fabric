@@ -70,10 +70,12 @@ object RegionDeleteGui {
 
         confirming.remove(player.uuid, regionId)
         if (RegionsConfig.removeRegion(regionId)) {
+            val affectedPlayers = mutableListOf<java.util.UUID>()
             CobbleSpawnRegions.activeVisualizations.entries.removeIf { entry ->
-                entry.value.remove(regionId)
+                if (entry.value.remove(regionId)) affectedPlayers.add(entry.key)
                 entry.value.isEmpty()
             }
+            affectedPlayers.forEach(CobbleSpawnRegions::requestParticleUpdate)
             SpawnPointStore.clearRegion(regionId)
             player.sendMessage(Text.literal("§a[CSR] §fDeleted region §e${region.regionName}§f."), false)
         } else {

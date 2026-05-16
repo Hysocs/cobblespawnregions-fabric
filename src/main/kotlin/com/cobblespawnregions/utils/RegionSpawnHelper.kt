@@ -17,6 +17,7 @@ import net.minecraft.util.math.Box
 import net.minecraft.util.math.random.Random
 import net.minecraft.world.chunk.ChunkStatus
 import org.slf4j.LoggerFactory
+import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -24,8 +25,10 @@ object RegionSpawnHelper {
 
     private val logger = LoggerFactory.getLogger("RegionSpawnHelper")
     private const val MOD_ID = "cobblespawnregions"
+    private const val RANDOM_SPAWN_POS_ATTEMPTS = 32
     private val random: Random = Random.create()
     private val spawnAttemptLocks = ConcurrentHashMap<String, Any>()
+    private val spawnBlockMatcherCache = ConcurrentHashMap<String, SpawnBlockMatcher>()
 
     // ════════════════════════════════════════════════════════════════════════
     // PUBLIC API
@@ -52,12 +55,21 @@ object RegionSpawnHelper {
         amount: Int = 1,
         respectTimer: Boolean = true
     ): List<PokemonEntity> {
+        val region = RegionsConfig.getRegion(regionId) ?: return emptyList()
+        return attemptSpawnInRegion(world, region, amount, respectTimer)
+    }
+
+    fun attemptSpawnInRegion(
+        world: ServerWorld,
+        region: RegionData,
+        amount: Int = 1,
+        respectTimer: Boolean = true
+    ): List<PokemonEntity> {
+        val regionId = region.regionId
         val attemptLock = spawnAttemptLocks.computeIfAbsent(regionId) { Any() }
         return synchronized(attemptLock) {
-        val region = RegionsConfig.getRegion(regionId) ?: return emptyList()
-
         if (region.dimension != world.registryKey.value.toString()) return emptyList()
-        if (respectTimer && !isSpawnReady(regionId)) return emptyList()
+        if (respectTimer && !isSpawnReady(region)) return emptyList()
         if (region.selectedPokemon.isEmpty()) return emptyList()
 
         // ── Region-wide cap (tracker-based, includes unloaded entities) ────────
@@ -74,9 +86,16 @@ object RegionSpawnHelper {
         }
 
         // ── Per-entry cap filter + basic condition check ───────────────────────
-        val eligible = region.selectedPokemon.filter { entry ->
-            checkBasicSpawnConditions(world, entry) == null &&
-                    isEntryUnderCap(world, region, entry)
+        val eligible = ArrayList<PokemonSpawnEntry>(region.selectedPokemon.size)
+        val entryKeys = IdentityHashMap<PokemonSpawnEntry, String>()
+        for (entry in region.selectedPokemon) {
+            if (checkBasicSpawnConditions(world, entry) != null) continue
+            if (entry.maxSpawnCount > 0) {
+                val entryKey = RegionEntityTracker.entryKey(entry)
+                if (RegionEntityTracker.countForEntry(regionId, entryKey) >= entry.maxSpawnCount) continue
+                entryKeys[entry] = entryKey
+            }
+            eligible.add(entry)
         }
 
         if (eligible.isEmpty()) {
@@ -87,14 +106,17 @@ object RegionSpawnHelper {
         val spawned = mutableListOf<PokemonEntity>()
         repeat(amount) {
             // Re-check region cap each iteration
-            if (region.maxTotalSpawns > 0 &&
+            if (amount > 1 && region.maxTotalSpawns > 0 &&
                 RegionEntityTracker.countTotal(regionId) >= region.maxTotalSpawns
             ) return@repeat
 
             val entry = selectPokemonByWeight(eligible) ?: return@repeat
 
             // Re-check per-entry cap for the chosen entry
-            if (!isEntryUnderCap(world, region, entry)) return@repeat
+            if (amount > 1 && entry.maxSpawnCount > 0) {
+                val entryKey = entryKeys[entry] ?: RegionEntityTracker.entryKey(entry)
+                if (RegionEntityTracker.countForEntry(regionId, entryKey) >= entry.maxSpawnCount) return@repeat
+            }
 
             val pos = pickRandomSpawnPos(regionId, entry.spawnSettings.allowedBlocks) ?: run {
                 logDebug(
@@ -142,7 +164,7 @@ object RegionSpawnHelper {
             logger.warn("[CSR-SPAWN] FAIL — chunk not loaded at $spawnPos")
             return null
         }
-        logger.info("[CSR-SPAWN] Chunk loaded at cx=${spawnPos.x shr 4} cz=${spawnPos.z shr 4}")
+        logger.debug("[CSR-SPAWN] Chunk loaded at cx=${spawnPos.x shr 4} cz=${spawnPos.z shr 4}")
 
         // ── 2. Species lookup ─────────────────────────────────────────────────
         val sanitized = entry.pokemonName.replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
@@ -150,19 +172,19 @@ object RegionSpawnHelper {
             logger.warn("[CSR-SPAWN] FAIL — species '$sanitized' not found in registry")
             return null
         }
-        logger.info("[CSR-SPAWN] Species resolved: ${species.name}")
+        logger.debug("[CSR-SPAWN] Species resolved: ${species.name}")
 
         // ── 3. Position diagnostics ───────────────────────────────────────────
         val blockAtFeet  = world.getBlockState(spawnPos)
         val blockAbove   = world.getBlockState(spawnPos.up())
         val blockAbove2  = world.getBlockState(spawnPos.up(2))
         val blockBelow   = world.getBlockState(spawnPos.down())
-        logger.info("[CSR-SPAWN] Position $spawnPos diagnostics:")
-        logger.info("  block below  (y-1): ${Registries.BLOCK.getId(blockBelow.block)}")
-        logger.info("  block at feet (y+0): ${Registries.BLOCK.getId(blockAtFeet.block)}")
-        logger.info("  block above  (y+1): ${Registries.BLOCK.getId(blockAbove.block)}")
-        logger.info("  block above  (y+2): ${Registries.BLOCK.getId(blockAbove2.block)}")
-        logger.info("  isAir@feet=${blockAtFeet.isAir}  isAir@+1=${blockAbove.isAir}  isAir@+2=${blockAbove2.isAir}")
+        logger.debug("[CSR-SPAWN] Position $spawnPos diagnostics:")
+        logger.debug("  block below  (y-1): ${Registries.BLOCK.getId(blockBelow.block)}")
+        logger.debug("  block at feet (y+0): ${Registries.BLOCK.getId(blockAtFeet.block)}")
+        logger.debug("  block above  (y+1): ${Registries.BLOCK.getId(blockAbove.block)}")
+        logger.debug("  block above  (y+2): ${Registries.BLOCK.getId(blockAbove2.block)}")
+        logger.debug("  isAir@feet=${blockAtFeet.isAir}  isAir@+1=${blockAbove.isAir}  isAir@+2=${blockAbove2.isAir}")
 
         if (!blockAtFeet.isAir && !blockAtFeet.isOf(net.minecraft.block.Blocks.WATER)) {
             logger.warn("[CSR-SPAWN] WARNING — block at feet ($spawnPos) is not air/water: ${Registries.BLOCK.getId(blockAtFeet.block)}")
@@ -171,7 +193,7 @@ object RegionSpawnHelper {
         // ── 4. World border check ─────────────────────────────────────────────
         val border = world.worldBorder
         val inBorder = border.contains(spawnPos.x.toDouble(), spawnPos.z.toDouble())
-        logger.info("[CSR-SPAWN] Inside world border: $inBorder (border size=${border.size})")
+        logger.debug("[CSR-SPAWN] Inside world border: $inBorder (border size=${border.size})")
         if (!inBorder) {
             logger.warn("[CSR-SPAWN] FAIL — position $spawnPos is outside the world border")
             return null
@@ -181,7 +203,7 @@ object RegionSpawnHelper {
         val level   = entry.minLevel + random.nextInt(entry.maxLevel - entry.minLevel + 1)
         val isShiny = entry.aspects.any { it.equals("shiny", ignoreCase = true) }
         val propsString = buildPropertiesString(sanitized, level, isShiny, entry, species)
-        logger.info("[CSR-SPAWN] Properties string: $propsString")
+        logger.debug("[CSR-SPAWN] Properties string: $propsString")
 
         val properties = PokemonProperties.parse(propsString)
         val entity     = properties.createEntity(world)
@@ -212,7 +234,7 @@ object RegionSpawnHelper {
 
         // ── 6. Bounding-box collision check ──────────────────────────────────
         val bb = entity.boundingBox
-        logger.info("[CSR-SPAWN] Entity bounding box: minX=%.2f minY=%.2f minZ=%.2f maxX=%.2f maxY=%.2f maxZ=%.2f"
+        logger.debug("[CSR-SPAWN] Entity bounding box: minX=%.2f minY=%.2f minZ=%.2f maxX=%.2f maxY=%.2f maxZ=%.2f"
             .format(bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ))
 
         val collisions = world.getBlockCollisions(entity, bb).toList()
@@ -220,19 +242,28 @@ object RegionSpawnHelper {
             logger.warn("[CSR-SPAWN] WARNING — ${collisions.size} block collision(s) inside entity BB:")
             collisions.take(5).forEach { logger.warn("  collision shape: $it") }
         } else {
-            logger.info("[CSR-SPAWN] No block collisions inside bounding box — clear to spawn")
+            logger.debug("[CSR-SPAWN] No block collisions inside bounding box — clear to spawn")
         }
 
         // ── 7. spawnEntity call ───────────────────────────────────────────────
-        logger.info("[CSR-SPAWN] Calling world.spawnEntity for '${pokemon.species.name}' lv$level at ($spawnX, $spawnY, $spawnZ)")
+        logger.debug("[CSR-SPAWN] Calling world.spawnEntity for '${pokemon.species.name}' lv$level at ($spawnX, $spawnY, $spawnZ)")
         return if (world.spawnEntity(entity)) {
-            logger.info("[CSR-SPAWN] SUCCESS — spawned '${pokemon.species.name}' lv$level @ $spawnPos")
+            logger.debug("[CSR-SPAWN] SUCCESS — spawned '${pokemon.species.name}' lv$level @ $spawnPos")
 
             // ── 8. Track if this is a region-managed spawn ───────────────────
             if (regionId != null && entryKey != null && spawnId != null) {
-                RegionEntityTracker.track(regionId, entryKey, spawnId, entity.uuid)
+                val chunkPos = entity.chunkPos
+                RegionEntityTracker.track(
+                    regionId = regionId,
+                    entryKey = entryKey,
+                    spawnId = spawnId,
+                    uuid = entity.uuid,
+                    dimension = world.registryKey.value.toString(),
+                    chunkX = chunkPos.x,
+                    chunkZ = chunkPos.z
+                )
                 RegionWanderingGoalManager.attachIfConfigured(entity)
-                logger.info("[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$entryKey")
+                logger.debug("[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$entryKey")
             }
 
             // ── 9. Flying setup if spawned 2+ blocks above solid ground ──────
@@ -240,7 +271,7 @@ object RegionSpawnHelper {
             // by the FLYING behaviour flag. The pose alone is only visual.
             if (isFlyingPosition(world, spawnPos) && entity.canFly()) {
                 entity.setFlying(true)
-                logger.info(
+                logger.debug(
                     "[CSR-SPAWN] Flying spawn — Cobblemon flying flag set " +
                             "for '${pokemon.species.name}' @ $spawnPos"
                 )
@@ -260,41 +291,94 @@ object RegionSpawnHelper {
      */
     fun pickRandomSpawnPos(regionId: String, allowedBlocks: List<String>): BlockPos? {
         val region = RegionsConfig.getRegion(regionId) ?: return null
-        if (SpawnPointStore.isEmpty(regionId)) return null
+        val floorCount = SpawnPointStore.size(regionId)
+        if (floorCount == 0) return null
+
+        val priorityRegions = RegionsConfig.regionsInPriorityOrder()
+        val matcher = matcherFor(allowedBlocks)
+
+        repeat(minOf(RANDOM_SPAWN_POS_ATTEMPTS, floorCount)) {
+            var selected: Long? = null
+            SpawnPointStore.rawAt(regionId, random.nextInt(floorCount)) { posLong, blockId, type ->
+                if (!matcher.matches(blockId, type)) return@rawAt
+                val pos = BlockPos.fromLong(posLong)
+                if (isControllingRegion(regionId, pos, region.dimension, priorityRegions)) {
+                    selected = posLong
+                }
+            }
+            selected?.let { return BlockPos.fromLong(it) }
+        }
+
+        var selected: Long? = null
+        var matched = 0
 
         if (allowedBlocks.isEmpty()) {
-            val all = mutableListOf<BlockPos>()
-            SpawnPointStore.forEach(regionId) { pos, _, _ ->
-                if (RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) all.add(pos)
+            SpawnPointStore.forEachRaw(regionId) { posLong, _, _ ->
+                val pos = BlockPos.fromLong(posLong)
+                if (isControllingRegion(regionId, pos, region.dimension, priorityRegions)) {
+                    matched++
+                    if (random.nextInt(matched) == 0) selected = posLong
+                }
             }
-            return if (all.isEmpty()) null else all[random.nextInt(all.size)]
+            return selected?.let(BlockPos::fromLong)
         }
 
-        val wantSolid  = "#solid" in allowedBlocks
-        val wantWater  = "#water" in allowedBlocks
-        val wantAir    = "#air"   in allowedBlocks
-        val literalIds = allowedBlocks
+        SpawnPointStore.forEachRaw(regionId) { posLong, blockId, type ->
+            val pos = BlockPos.fromLong(posLong)
+            if (!isControllingRegion(regionId, pos, region.dimension, priorityRegions)) return@forEachRaw
+
+            if (matcher.matches(blockId, type)) {
+                matched++
+                if (random.nextInt(matched) == 0) selected = posLong
+            }
+        }
+        return selected?.let(BlockPos::fromLong)
+    }
+
+    private fun isControllingRegion(
+        regionId: String,
+        pos: BlockPos,
+        dimension: String,
+        priorityRegions: List<RegionData>
+    ): Boolean {
+        for (candidate in priorityRegions) {
+            if (candidate.dimension != dimension) continue
+            if (RegionsConfig.contains(candidate, pos)) return candidate.regionId == regionId
+        }
+        return false
+    }
+
+    private fun matcherFor(allowedBlocks: List<String>): SpawnBlockMatcher {
+        val normalized = allowedBlocks.map { it.lowercase() }
+        val key = if (normalized.isEmpty()) {
+            ""
+        } else {
+            normalized.asSequence()
+                .sorted()
+                .joinToString("|")
+        }
+        return spawnBlockMatcherCache.computeIfAbsent(key) { SpawnBlockMatcher(normalized) }
+    }
+
+    private class SpawnBlockMatcher(allowedBlocks: List<String>) {
+        private val allowAny = allowedBlocks.isEmpty()
+        private val wantSolid = "#solid" in allowedBlocks
+        private val wantWater = "#water" in allowedBlocks
+        private val wantAir = "#air" in allowedBlocks
+        private val literalBlockIds = allowedBlocks
+            .asSequence()
             .filter { !it.startsWith("#") }
-            .map    { it.lowercase() }.toSet()
+            .mapNotNull { Identifier.tryParse(it.lowercase()) }
+            .mapNotNull { Registries.BLOCK.get(it) }
+            .mapTo(HashSet()) { Registries.BLOCK.getRawId(it) }
 
-        val matches = mutableListOf<BlockPos>()
-        SpawnPointStore.forEach(regionId) { pos, block, type ->
-            if (!RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) return@forEach
-
-            val id         = Registries.BLOCK.getId(block).toString().lowercase()
-            val isAirSpawn = type == SpawnType.AIR
-            val isWater    = type == SpawnType.WATER
-            val isSolid    = type == SpawnType.SOLID
-
-            val passes = id in literalIds
-                    || (wantAir   && isAirSpawn)
-                    || (wantWater && isWater)
-                    || (wantSolid && isSolid)
-
-            if (passes) matches.add(pos)
+        fun matches(blockId: Int, type: SpawnType): Boolean {
+            if (allowAny) return true
+            return blockId in literalBlockIds ||
+                    (wantAir && type == SpawnType.AIR) ||
+                    (wantWater && type == SpawnType.WATER) ||
+                    (wantSolid && type == SpawnType.SOLID)
         }
-        if (matches.isEmpty()) return null
-        return matches[random.nextInt(matches.size)]
     }
 
     /**
@@ -304,23 +388,28 @@ object RegionSpawnHelper {
     fun selectPokemonByWeight(eligible: List<PokemonSpawnEntry>): PokemonSpawnEntry? {
         if (eligible.isEmpty()) return null
 
-        val kotlinRandom = object : kotlin.random.Random() {
-            override fun nextBits(bitCount: Int): Int = random.nextInt() and ((1 shl bitCount) - 1)
-            override fun nextDouble(): Double = random.nextDouble()
+        var independentHit: PokemonSpawnEntry? = null
+        var independentHits = 0
+        var totalCompetitive = 0.0
+
+        for (entry in eligible) {
+            when (entry.spawnChanceType) {
+                SpawnChanceType.INDEPENDENT -> {
+                    if (random.nextDouble() * 100.0 <= entry.spawnChance) {
+                        independentHits++
+                        if (random.nextInt(independentHits) == 0) independentHit = entry
+                    }
+                }
+                SpawnChanceType.COMPETITIVE -> totalCompetitive += entry.spawnChance
+            }
         }
-
-        val independent = eligible.filter { it.spawnChanceType == SpawnChanceType.INDEPENDENT }
-        val competitive = eligible.filter { it.spawnChanceType == SpawnChanceType.COMPETITIVE }
-
-        val independentHits = independent.filter { random.nextDouble() * 100.0 <= it.spawnChance }
-        if (independentHits.isNotEmpty()) return independentHits.random(kotlinRandom)
-
-        val totalCompetitive = competitive.sumOf { it.spawnChance }
+        independentHit?.let { return it }
         if (totalCompetitive <= 0.0) return null
 
-        val roll = kotlinRandom.nextDouble() * totalCompetitive
+        val roll = random.nextDouble() * totalCompetitive
         var cumulative = 0.0
-        for (entry in competitive) {
+        for (entry in eligible) {
+            if (entry.spawnChanceType != SpawnChanceType.COMPETITIVE) continue
             cumulative += entry.spawnChance
             if (roll <= cumulative) return entry
         }
@@ -350,8 +439,17 @@ object RegionSpawnHelper {
 
     fun isSpawnReady(regionId: String): Boolean {
         val region = RegionsConfig.getRegion(regionId) ?: return false
-        val last = RegionsConfig.lastSpawnTicks[regionId] ?: return true
-        return System.currentTimeMillis() >= last + region.spawnTimerTicks * 50L
+        return isSpawnReady(region)
+    }
+
+    fun isSpawnReady(region: RegionData): Boolean {
+        val last = RegionsConfig.lastSpawnTicks[region.regionId] ?: return true
+        return System.currentTimeMillis() >= nextSpawnDueAt(region)
+    }
+
+    fun nextSpawnDueAt(region: RegionData): Long {
+        val last = RegionsConfig.lastSpawnTicks[region.regionId] ?: return 0L
+        return last + region.spawnTimerTicks * 50L
     }
 
     fun markSpawnAttempted(regionId: String) {

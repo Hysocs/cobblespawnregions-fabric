@@ -150,7 +150,10 @@ data class RegionData(
 data class RegionsMainConfig(
     override val version: String = "1.0.0",
     override val configId: String = "cobblespawnregions",
-    var debugEnabled: Boolean = false
+    var debugEnabled: Boolean = false,
+    var showUnimplementedPokemonInGui: Boolean = false,
+    var showFormsInGui: Boolean = true,
+    var showAspectsInGui: Boolean = true
 ) : ConfigData
 
 // ── Config manager ────────────────────────────────────────────────────────────
@@ -168,6 +171,7 @@ object RegionsConfig {
     private var isInitialized = false
 
     private val regionFileMap = ConcurrentHashMap<String, String>()
+    @Volatile private var cachedPriorityRegions: List<RegionData>? = null
 
     private val gson: Gson = GsonBuilder()
         .setPrettyPrinting()
@@ -185,6 +189,9 @@ object RegionsConfig {
         get() = regionFileMap.keys.mapNotNull { id ->
             getRegion(id)?.let { id to it }
         }.toMap()
+
+    fun allRegions(): List<RegionData> =
+        regionsInPriorityOrder()
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
@@ -221,10 +228,17 @@ object RegionsConfig {
         updateDebugState()
     }
 
+    fun saveConfigBlocking() {
+        if (!::configManager.isInitialized) return
+        runBlocking { configManager.saveConfig(config) }
+        updateDebugState()
+    }
+
     // ── Disk I/O ──────────────────────────────────────────────────────────────
 
     private suspend fun loadRegionsFromDisk() {
         regionFileMap.clear()
+        invalidateRegionCaches()
         val files = regionsDir.listFiles { _, n -> n.endsWith(".json") || n.endsWith(".jsonc") } ?: return
         files.forEach { file ->
             try {
@@ -242,6 +256,7 @@ object RegionsConfig {
                     )
                 )
                 configManager.saveSecondaryConfig(relativeName, raw)
+                invalidateRegionCaches()
             } catch (e: Exception) {
                 logger.error("Failed to load region file: ${file.name}", e)
             }
@@ -252,6 +267,7 @@ object RegionsConfig {
         val fileName = regionFileMap[regionId] ?: return
         val data = getRegion(regionId) ?: return
         runBlocking { configManager.saveSecondaryConfig(fileName, data) }
+        invalidateRegionCaches()
     }
 
     // ── Region CRUD ───────────────────────────────────────────────────────────
@@ -270,6 +286,7 @@ object RegionsConfig {
             )
             configManager.saveSecondaryConfig(fileName, data)
         }
+        invalidateRegionCaches()
         return true
     }
 
@@ -279,11 +296,11 @@ object RegionsConfig {
     }
 
     fun regionsInPriorityOrder(): List<RegionData> =
-        regions.values.sortedWith(
+        cachedPriorityRegions ?: regions.values.sortedWith(
             compareByDescending<RegionData> { it.priority }
                 .thenBy { regionVolume(it) }
                 .thenBy { it.regionId }
-        )
+        ).also { cachedPriorityRegions = it }
 
     fun regionsAt(pos: BlockPos, dimension: String): List<RegionData> =
         regionsInPriorityOrder().filter { it.dimension == dimension && contains(it, pos) }
@@ -313,6 +330,7 @@ object RegionsConfig {
         configManager.unregisterConfig(fileName)
         File(modConfigDir, fileName).takeIf { it.exists() }?.delete()
         lastSpawnTicks.remove(regionId)
+        invalidateRegionCaches()
         return true
     }
 
@@ -320,6 +338,7 @@ object RegionsConfig {
         val region = getRegion(regionId) ?: return null
         update(region)
         saveRegion(regionId)
+        invalidateRegionCaches()
         return region
     }
 
@@ -448,6 +467,9 @@ object RegionsConfig {
 
     private fun fileNameForId(id: String) = "regions/region_$id.jsonc"
     private fun updateDebugState() = LogDebug.setDebugEnabledForMod(MOD_ID, config.debugEnabled)
+    private fun invalidateRegionCaches() {
+        cachedPriorityRegions = null
+    }
     private fun roundToOneDecimal(v: Float) = (v * 10).roundToInt() / 10f
     private fun sameForm(a: String?, b: String?): Boolean = normalizeForm(a) == normalizeForm(b)
     private fun normalizeForm(form: String?): String {

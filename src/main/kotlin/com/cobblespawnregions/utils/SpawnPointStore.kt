@@ -64,6 +64,20 @@ object SpawnPointStore {
     fun isEmpty(regionId: String): Boolean =
         (regionFloors[regionId]?.size ?: 0) == 0
 
+    fun size(regionId: String): Int =
+        regionFloors[regionId]?.size ?: 0
+
+    fun rawAt(regionId: String, index: Int, action: (posLong: Long, blockId: Int, type: SpawnType) -> Unit): Boolean {
+        val data = regionFloors[regionId] ?: return false
+        if (index !in 0 until data.size) return false
+        action(
+            data.positions[index],
+            data.blockIds[index],
+            SpawnType.entries[data.types[index].toInt()]
+        )
+        return true
+    }
+
     /**
      * Iterate all floors for a region without allocating any objects.
      * [block] is decoded from the registry on each call — cache it if needed.
@@ -74,6 +88,17 @@ object SpawnPointStore {
             action(
                 BlockPos.fromLong(data.positions[i]),
                 Registries.BLOCK.get(data.blockIds[i]),
+                SpawnType.entries[data.types[i].toInt()]
+            )
+        }
+    }
+
+    fun forEachRaw(regionId: String, action: (posLong: Long, blockId: Int, type: SpawnType) -> Unit) {
+        val data = regionFloors[regionId] ?: return
+        for (i in 0 until data.size) {
+            action(
+                data.positions[i],
+                data.blockIds[i],
                 SpawnType.entries[data.types[i].toInt()]
             )
         }

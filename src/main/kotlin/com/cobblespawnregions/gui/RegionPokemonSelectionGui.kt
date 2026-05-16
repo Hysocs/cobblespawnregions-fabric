@@ -2,6 +2,8 @@ package com.cobblespawnregions.gui
 
 import com.cobblemon.mod.common.api.pokemon.PokemonProperties
 import com.cobblemon.mod.common.api.pokemon.PokemonSpecies
+import com.cobblemon.mod.common.api.pokemon.feature.ChoiceSpeciesFeatureProvider
+import com.cobblemon.mod.common.api.pokemon.feature.SpeciesFeatures
 import com.cobblemon.mod.common.item.PokemonItem
 import com.cobblemon.mod.common.pokemon.FormData
 import com.cobblemon.mod.common.pokemon.Species
@@ -49,6 +51,8 @@ object RegionPokemonSelectionGui {
     private var cachedVariants:    List<SpeciesFormVariant>? = null
     private var cachedSortMethod:  RegionSortMethod?         = null
     private var cachedSearchTerm:  String?                   = null
+    private var cachedConfigKey:   String?                   = null
+    private val additionalAspectsCache = ConcurrentHashMap<String, List<Set<String>>>()
 
     // ── Slots ─────────────────────────────────────────────────────────────────
 
@@ -249,12 +253,13 @@ object RegionPokemonSelectionGui {
         isSelected: Boolean,
         selected: List<PokemonSpawnEntry>
     ): ItemStack {
-        val props   = PokemonProperties.parse(buildPropsString(variant))
+        val showForms = RegionsConfig.config.showFormsInGui
+        val props   = PokemonProperties.parse(buildPropsString(variant, showForms))
         val pokemon = props.create()
         val tint    = if (isSelected) Vector4f(1f, 1f, 1f, 1f) else Vector4f(0.3f, 0.3f, 0.3f, 1f)
         val item    = PokemonItem.from(pokemon, tint = tint)
 
-        item.setCustomName(Text.literal((if (isSelected) "§f§n" else "§f") + buildDisplayName(variant)))
+        item.setCustomName(Text.literal((if (isSelected) "§f§n" else "§f") + buildDisplayName(variant, showForms)))
 
         if (isSelected) {
             CustomGui.addEnchantmentGlint(item)
@@ -289,14 +294,15 @@ object RegionPokemonSelectionGui {
             val fn = if (variant.form.name == Constants.STANDARD_FORM) Constants.NORMAL_FORM else variant.form.name
             add("§7Form: §f$fn")
         }
-        if (variant.additionalAspects.isNotEmpty()) {
-            add("§7Aspects: §f${variant.additionalAspects.joinToString(", ") { it.replaceFirstChar(Char::titlecase) }}")
+        val aspects = displayableAspects(variant.additionalAspects)
+        if (aspects.isNotEmpty()) {
+            add("§7Aspects: §f${aspects.joinToString(", ")}")
         }
     }
 
-    private fun buildPropsString(variant: SpeciesFormVariant): String = buildString {
+    private fun buildPropsString(variant: SpeciesFormVariant, showForms: Boolean): String = buildString {
         append(variant.species.showdownId())
-        if (variant.form.name != Constants.STANDARD_FORM) {
+        if (showForms && variant.form.name != Constants.STANDARD_FORM) {
             if (variant.form.aspects.isNotEmpty())
                 variant.form.aspects.forEach { append(" aspect=${it.lowercase()}") }
             else
@@ -308,31 +314,48 @@ object RegionPokemonSelectionGui {
         }
     }
 
-    private fun buildDisplayName(variant: SpeciesFormVariant): String {
+    private fun buildDisplayName(variant: SpeciesFormVariant, showForms: Boolean): String {
         val parts = mutableListOf<String>()
-        if (variant.form.name != Constants.STANDARD_FORM)
+        if (showForms || variant.form.name != Constants.STANDARD_FORM)
             parts.add(if (variant.form.name == Constants.STANDARD_FORM) Constants.NORMAL_FORM else variant.form.name)
-        parts.addAll(variant.additionalAspects.map { it.replaceFirstChar(Char::titlecase) })
+        parts.addAll(displayableAspects(variant.additionalAspects))
         return if (parts.isNotEmpty()) "${variant.species.name} (${parts.joinToString(", ")})" else variant.species.name
+    }
+
+    private fun displayableAspects(aspects: Set<String>): List<String> {
+        return when {
+            RegionsConfig.config.showAspectsInGui -> aspects.map { it.replaceFirstChar(Char::titlecase) }
+            aspects.any { it.equals(Constants.SHINY_ASPECT, true) } -> listOf("Shiny")
+            else -> emptyList()
+        }
     }
 
     // ── Variant list / cache ──────────────────────────────────────────────────
 
     private fun getAllVariants(selected: List<PokemonSpawnEntry>): List<SpeciesFormVariant> {
+        val config = RegionsConfig.config
+        val configKey = "${config.showUnimplementedPokemonInGui}_${config.showFormsInGui}_${config.showAspectsInGui}"
         if (sortMethod != RegionSortMethod.SELECTED &&
             cachedVariants != null &&
             cachedSortMethod == sortMethod &&
-            cachedSearchTerm == searchTerm
+            cachedSearchTerm == searchTerm &&
+            cachedConfigKey == configKey
         ) return cachedVariants!!
 
         val speciesList = getSortedSpecies()
         val variants = speciesList.flatMap { species ->
-            val forms = if (species.forms.isNotEmpty()) species.forms else listOf(species.standardForm)
+            val forms = if (config.showFormsInGui && species.forms.isNotEmpty()) species.forms else listOf(species.standardForm)
+            val aspectSets = if (config.showAspectsInGui) additionalAspectSets(species) else emptyList()
             forms.flatMap { form ->
-                listOf(
+                val baseVariants = listOf(
                     SpeciesFormVariant(species, form, emptySet()),
                     SpeciesFormVariant(species, form, setOf(Constants.SHINY_ASPECT))
                 )
+                if (config.showAspectsInGui) {
+                    (baseVariants + aspectSets.map { SpeciesFormVariant(species, form, it) }).distinctBy { it.toKey() }
+                } else {
+                    baseVariants
+                }
             }.distinctBy { it.toKey() }
         }
 
@@ -344,12 +367,14 @@ object RegionPokemonSelectionGui {
             cachedVariants   = result
             cachedSortMethod = sortMethod
             cachedSearchTerm = searchTerm
+            cachedConfigKey  = configKey
         }
         return result
     }
 
     private fun getSortedSpecies(): List<Species> {
-        val all = PokemonSpecies.species.filter { it.implemented }
+        val showUnimplemented = RegionsConfig.config.showUnimplementedPokemonInGui
+        val all = PokemonSpecies.species.filter { showUnimplemented || it.implemented }
         return when (sortMethod) {
             RegionSortMethod.ALPHABETICAL -> all.sortedBy { it.name }
             RegionSortMethod.TYPE         -> all.sortedBy { it.primaryType.name }
@@ -357,6 +382,25 @@ object RegionPokemonSelectionGui {
             RegionSortMethod.SEARCH       ->
                 if (searchTerm.isBlank()) all.sortedBy { it.name }
                 else all.filter { it.name.lowercase().contains(searchTerm.lowercase()) }.sortedBy { it.name }
+        }
+    }
+
+    private fun additionalAspectSets(species: Species): List<Set<String>> {
+        return additionalAspectsCache.getOrPut(species.name.lowercase()) {
+            val aspectSets = mutableSetOf(setOf(Constants.SHINY_ASPECT))
+            val aspects = mutableSetOf<String>()
+
+            species.forms.forEach { form -> form.aspects.forEach(aspects::add) }
+            SpeciesFeatures.getFeaturesFor(species)
+                .filterIsInstance<ChoiceSpeciesFeatureProvider>()
+                .forEach { provider -> provider.getAllAspects().forEach(aspects::add) }
+
+            aspects.forEach { aspect ->
+                aspectSets.add(setOf(aspect))
+                aspectSets.add(setOf(aspect, Constants.SHINY_ASPECT))
+            }
+
+            aspectSets.distinctBy { it.toSortedSet().joinToString(",") }
         }
     }
 
