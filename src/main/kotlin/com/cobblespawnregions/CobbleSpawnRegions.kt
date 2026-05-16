@@ -4,6 +4,7 @@ import com.cobblemon.mod.common.entity.pokemon.PokemonEntity
 import com.cobblespawnregions.utils.RegionCommands
 import com.cobblespawnregions.utils.RegionBattleTracker
 import com.cobblespawnregions.utils.RegionCatchingTracker
+import com.cobblespawnregions.utils.RegionData
 import com.cobblespawnregions.utils.RegionEntityTracker
 import com.cobblespawnregions.utils.RegionParticleUtils
 import com.cobblespawnregions.utils.RegionSpawnHelper
@@ -90,6 +91,7 @@ object CobbleSpawnRegions : ModInitializer {
                 val rWorld = server.getWorld(parseDimension(region.dimension)) ?: continue
                 val box    = RegionSpawnHelper.regionBoundingBox(region)
                 RegionEntityTracker.rebuildFromWorld(rWorld, region.regionId, box)
+                reconcileLoadedRegionChunks(rWorld, region)
                 logger.info(
                     "[CSR] Tracker rebuilt for '${region.regionId}': " +
                             "${RegionEntityTracker.countTotal(region.regionId)} entity/ies tracked."
@@ -127,7 +129,7 @@ object CobbleSpawnRegions : ModInitializer {
             battleTracker.startCleanupScheduler(server)
         }
 
-        ServerLifecycleEvents.SERVER_STOPPING.register { _ ->
+        ServerLifecycleEvents.SERVER_STOPPING.register { server ->
             serverReady = false
             SpawnPointScanner.clearQueue()
             SchedulerManager.shutdown("cobblespawnregions-particle-loop")
@@ -135,6 +137,11 @@ object CobbleSpawnRegions : ModInitializer {
             SchedulerManager.shutdown("cobblespawnregions-spawn-loop")
             SchedulerManager.shutdown("cobblespawnregions-tracker-save-loop")
             SchedulerManager.shutdown("cobblespawnregions-battle-cleanup")
+            if (RegionsConfig.config.killTrackedPokemonOnServerStop) {
+                val removed = removeLoadedTrackedPokemon(server)
+                RegionEntityTracker.clearAllAndMarkDirty()
+                logger.info("[CSR] Removed $removed loaded tracked Pokemon on server stop.")
+            }
             RegionEntityTracker.flushIfDirty()
             playerSelections.clear()
             activeVisualizations.clear()
@@ -258,6 +265,41 @@ object CobbleSpawnRegions : ModInitializer {
             hasActiveRegion -> now + 1_000L
             else -> now + 5_000L
         }
+    }
+
+    private fun reconcileLoadedRegionChunks(world: ServerWorld, region: RegionData) {
+        val minCX = minOf(region.pos1.x, region.pos2.x) shr 4
+        val maxCX = maxOf(region.pos1.x, region.pos2.x) shr 4
+        val minCZ = minOf(region.pos1.z, region.pos2.z) shr 4
+        val maxCZ = maxOf(region.pos1.z, region.pos2.z) shr 4
+
+        for (cx in minCX..maxCX) {
+            for (cz in minCZ..maxCZ) {
+                if (world.isChunkLoaded(cx, cz)) {
+                    RegionEntityTracker.reconcileLoadedChunk(world, region.regionId, ChunkPos(cx, cz))
+                }
+            }
+        }
+    }
+
+    private fun removeLoadedTrackedPokemon(server: MinecraftServer): Int {
+        var removed = 0
+        for (region in RegionsConfig.allRegions()) {
+            val world = server.getWorld(parseDimension(region.dimension)) ?: continue
+            val box = RegionSpawnHelper.regionBoundingBox(region)
+            val entities = world.getEntitiesByClass(PokemonEntity::class.java, box) { entity ->
+                val data = entity.pokemon.persistentData
+                data.getString(RegionEntityTracker.REGION_KEY) == region.regionId
+            }
+
+            for (entity in entities) {
+                if (!entity.isRemoved) {
+                    entity.discard()
+                    removed++
+                }
+            }
+        }
+        return removed
     }
 
     private fun parseDimension(str: String): RegistryKey<World> {

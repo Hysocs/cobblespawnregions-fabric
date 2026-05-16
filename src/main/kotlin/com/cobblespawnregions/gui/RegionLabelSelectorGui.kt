@@ -179,7 +179,7 @@ object RegionLabelSelectorGui {
                 Text.literal("§7Click to toggle this label in"),
                 Text.literal("§7disallowedLabels.")
             ),
-            if (isExcluded) Textures.LABEL_ON else Textures.LABEL_OFF
+            AlphabetHeadTextures.forFirstLetter(label, if (isExcluded) Textures.LABEL_ON else Textures.LABEL_OFF)
         )
         if (isExcluded) CustomGui.addEnchantmentGlint(item)
         return item

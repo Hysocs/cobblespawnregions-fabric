@@ -132,7 +132,7 @@ object RegionExcludedConditionsListGui {
                 Text.literal(""),
                 Text.literal("§eClick §7to remove")
             ),
-            Textures.ENTRY
+            AlphabetHeadTextures.forFirstLetter(condition, Textures.ENTRY)
         )
         CustomGui.addEnchantmentGlint(item)
         return item

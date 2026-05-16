@@ -170,6 +170,11 @@ object RegionEntityTracker {
         unloadingChunks.clear()
     }
 
+    fun clearAllAndMarkDirty() {
+        clearAll()
+        markDirty()
+    }
+
     fun clearRegion(regionId: String) {
         var changed = false
         spawnRecords.values

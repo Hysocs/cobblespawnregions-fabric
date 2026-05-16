@@ -35,7 +35,7 @@ object RegionEditorGui {
     }
 
     private object Textures {
-        const val REGION = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
+        const val REGION = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjlhMjhiYTNiYTc5YmUxOTU0NzEwZDRkYjJhM2ZkMjI3NzNmNjE5ZjE4ZmVjZjU5ODIzNTNmYjdhYzE4MzkzYSJ9fX0="
         const val NATURAL = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTdiMjE4OTMwMGYzMzliYTA1MGUwMWFlMmE1NDBiN2U4OWVmODk2YTU1Yzc5MTZkY2M5ZTU4NTFhZjg2NDExZSJ9fX0="
         const val CUSTOM = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
         const val BACK = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
@@ -43,7 +43,7 @@ object RegionEditorGui {
 
     fun open(player: ServerPlayerEntity, regionId: String) {
         val region = RegionsConfig.getRegion(regionId) ?: run {
-            player.sendMessage(Text.literal("§c[CSR] Region '$regionId' not found."), false)
+            player.sendMessage(Text.literal("Â§c[CSR] Region '$regionId' not found."), false)
             return
         }
         CustomGui.openGui(
@@ -100,11 +100,11 @@ object RegionEditorGui {
         "region_${region.regionId}",
         Text.literal(region.regionName).formatted(Formatting.YELLOW),
         listOf(
-            Text.literal("§8${region.regionId}  [${region.mode}]"),
-            Text.literal("§7Dimension: §f${region.dimension}"),
-            Text.literal("§7Priority: §f${region.priority}"),
+            Text.literal("Â§8${region.regionId}  [${region.mode}]"),
+            Text.literal("Â§7Dimension: Â§f${region.dimension}"),
+            Text.literal("Â§7Priority: Â§f${region.priority}"),
             Text.literal(""),
-            Text.literal("§8Higher priority controls overlapping positions.")
+            Text.literal("Â§8Higher priority controls overlapping positions.")
         ),
         Textures.REGION
     )
@@ -117,20 +117,20 @@ object RegionEditorGui {
         return ItemStack(Items.COMPARATOR).apply {
             setCustomName(Text.literal("Priority: ${region.priority}").formatted(Formatting.GOLD))
             CustomGui.setItemLore(this, buildList {
-                add("§7Higher priority controls overlapping areas.")
-                add("§8Tie-breaker: smaller region, then region id.")
+                add("Â§7Higher priority controls overlapping areas.")
+                add("Â§8Tie-breaker: smaller region, then region id.")
                 add("")
-                add("§7Left-click: §a+1")
-                add("§7Right-click: §c-1")
+                add("Â§7Left-click: Â§a+1")
+                add("Â§7Right-click: Â§c-1")
                 add("")
                 if (overlaps.isEmpty()) {
-                    add("§7Overlaps: §fnone")
+                    add("Â§7Overlaps: Â§fnone")
                 } else {
-                    add("§7Overlaps:")
+                    add("Â§7Overlaps:")
                     overlaps.take(5).forEach {
-                        add("§8- §f${it.regionName} §7priority §f${it.priority}")
+                        add("Â§8- Â§f${it.regionName} Â§7priority Â§f${it.priority}")
                     }
-                    if (overlaps.size > 5) add("§8...and ${overlaps.size - 5} more")
+                    if (overlaps.size > 5) add("Â§8...and ${overlaps.size - 5} more")
                 }
             })
         }
@@ -140,15 +140,15 @@ object RegionEditorGui {
         "NaturalSettings",
         Text.literal("Natural Spawn Settings").formatted(Formatting.GREEN),
         listOf(
-            Text.literal("§7Controls wild/natural Pokemon where"),
-            Text.literal("§7this region wins priority."),
+            Text.literal("Â§7Controls wild/natural Pokemon where"),
+            Text.literal("Â§7this region wins priority."),
             Text.literal(""),
-            Text.literal("§7Disable All: ${flag(region.spawnRestrictions.disableAll)}"),
-            Text.literal("§7Blocked Species: §f${region.spawnRestrictions.disallowedSpecies.size}"),
-            Text.literal("§7Labels: §f${region.spawnRestrictions.disallowedLabels.size}"),
-            Text.literal("§7Conditions: §f${region.spawnRestrictions.exclusionConditions.size}"),
+            Text.literal("Â§7Disable All: ${flag(region.spawnRestrictions.disableAll)}"),
+            Text.literal("Â§7Blocked Species: Â§f${region.spawnRestrictions.disallowedSpecies.size}"),
+            Text.literal("Â§7Labels: Â§f${region.spawnRestrictions.disallowedLabels.size}"),
+            Text.literal("Â§7Conditions: Â§f${region.spawnRestrictions.exclusionConditions.size}"),
             Text.literal(""),
-            Text.literal("§eClick §7to configure")
+            Text.literal("Â§eClick Â§7to configure")
         ),
         Textures.NATURAL
     )
@@ -157,14 +157,14 @@ object RegionEditorGui {
         "CustomSpawns",
         Text.literal("Custom Spawns").formatted(Formatting.LIGHT_PURPLE),
         listOf(
-            Text.literal("§7Pokemon this region spawns itself"),
-            Text.literal("§7where it wins priority."),
+            Text.literal("Â§7Pokemon this region spawns itself"),
+            Text.literal("Â§7where it wins priority."),
             Text.literal(""),
-            Text.literal("§7Configured Pokemon: §f${region.selectedPokemon.size}"),
-            Text.literal("§7Timer: §f${region.spawnTimerTicks} ticks §8(${region.spawnTimerTicks / 20.0}s)"),
-            Text.literal("§7Max Alive: §f${region.maxTotalSpawns} §8(0 = unlimited)"),
+            Text.literal("Â§7Configured Pokemon: Â§f${region.selectedPokemon.size}"),
+            Text.literal("Â§7Timer: Â§f${region.spawnTimerTicks} ticks Â§8(${region.spawnTimerTicks / 20.0}s)"),
+            Text.literal("Â§7Max Alive: Â§f${region.maxTotalSpawns} Â§8(0 = unlimited)"),
             Text.literal(""),
-            Text.literal("§eClick §7to configure")
+            Text.literal("Â§eClick Â§7to configure")
         ),
         Textures.CUSTOM
     )
@@ -173,7 +173,7 @@ object RegionEditorGui {
     private fun backBtn() = CustomGui.createPlayerHeadButton(
         "Back",
         Text.literal("Back").formatted(Formatting.RED),
-        listOf(Text.literal("§7Return to region list")),
+        listOf(Text.literal("Â§7Return to region list")),
         Textures.BACK
     )
 
@@ -189,7 +189,7 @@ object RegionEditorGui {
                 aMinZ <= bMaxZ && aMaxZ >= bMinZ
     }
 
-    private fun flag(b: Boolean) = if (b) "§atrue" else "§cfalse"
+    private fun flag(b: Boolean) = if (b) "Â§atrue" else "Â§cfalse"
     private fun glass() = ItemStack(Items.CYAN_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
     private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
 }

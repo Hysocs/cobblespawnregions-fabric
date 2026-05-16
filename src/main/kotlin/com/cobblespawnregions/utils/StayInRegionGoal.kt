@@ -10,7 +10,8 @@ import java.util.EnumSet
 class StayInRegionGoal(
     private val entity: MobEntity,
     private val regionId: String,
-    private val settings: RegionWanderingSettings
+    private val settings: RegionWanderingSettings,
+    private val allowedBlocks: List<String>
 ) : Goal() {
 
     private var targetPos: Vec3d? = null
@@ -46,11 +47,7 @@ class StayInRegionGoal(
 
     override fun start() {
         val region = cachedRegion ?: RegionsConfig.getRegion(regionId) ?: return
-        targetPos = if (settings.returnTarget.equals("CENTER", ignoreCase = true)) {
-            centerTarget(region)
-        } else {
-            randomTarget(region) ?: centerTarget(region)
-        }
+        targetPos = targetForMode(region, chooseNewRandom = true)
 
         val target = targetPos ?: return
         lastDistanceToTargetSq = Double.MAX_VALUE
@@ -70,7 +67,7 @@ class StayInRegionGoal(
         val region = cachedRegion ?: RegionsConfig.getRegion(regionId)?.also { cachedRegion = it } ?: return
         if (RegionsConfig.contains(region, entity.blockPos)) return
 
-        val target = targetPos ?: centerTarget(region).also { targetPos = it }
+        val target = targetPos ?: targetForMode(region, chooseNewRandom = true).also { targetPos = it }
         val now = entity.world.time
         val distanceSq = target.squaredDistanceTo(entity.pos)
 
@@ -101,11 +98,7 @@ class StayInRegionGoal(
     private fun repath(region: RegionData, now: Long, chooseNewTarget: Boolean) {
         if (now - lastRepathTick < REPATH_COOLDOWN_TICKS) return
 
-        val target = if (chooseNewTarget && !settings.returnTarget.equals("CENTER", ignoreCase = true)) {
-            randomTarget(region) ?: centerTarget(region)
-        } else {
-            targetPos ?: centerTarget(region)
-        }
+        val target = if (chooseNewTarget) targetForMode(region, chooseNewRandom = true) else targetPos ?: targetForMode(region, chooseNewRandom = false)
         targetPos = target
 
         if (startPathTo(target)) {
@@ -128,6 +121,24 @@ class StayInRegionGoal(
         return true
     }
 
+    private fun targetForMode(region: RegionData, chooseNewRandom: Boolean): Vec3d =
+        when (settings.returnTarget.uppercase()) {
+            "CENTER" -> spawnPointNear(centerTarget(region)) ?: centerTarget(region)
+            "CLOSEST" -> spawnPointNear(entity.pos) ?: closestTarget(region)
+            else -> {
+                if (chooseNewRandom) {
+                    RegionSpawnHelper.pickRandomSpawnPos(regionId, allowedBlocks)?.let(Vec3d::ofBottomCenter)
+                        ?: randomTarget(region)
+                        ?: centerTarget(region)
+                } else {
+                    targetPos ?: spawnPointNear(centerTarget(region)) ?: centerTarget(region)
+                }
+            }
+        }
+
+    private fun spawnPointNear(origin: Vec3d): Vec3d? =
+        RegionSpawnHelper.pickClosestSpawnPos(regionId, allowedBlocks, origin)?.let(Vec3d::ofBottomCenter)
+
     private fun randomTarget(region: RegionData): Vec3d? {
         val minX = minOf(region.pos1.x, region.pos2.x)
         val maxX = maxOf(region.pos1.x, region.pos2.x)
@@ -146,6 +157,22 @@ class StayInRegionGoal(
         }
 
         return null
+    }
+
+    private fun closestTarget(region: RegionData): Vec3d {
+        val minX = minOf(region.pos1.x, region.pos2.x)
+        val maxX = maxOf(region.pos1.x, region.pos2.x)
+        val minY = minOf(region.pos1.y, region.pos2.y)
+        val maxY = maxOf(region.pos1.y, region.pos2.y)
+        val minZ = minOf(region.pos1.z, region.pos2.z)
+        val maxZ = maxOf(region.pos1.z, region.pos2.z)
+
+        val x = entity.blockPos.x.coerceIn(minX, maxX)
+        val z = entity.blockPos.z.coerceIn(minZ, maxZ)
+        val surfaceY = entity.world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z)
+        val y = surfaceY.coerceIn(minY, maxY)
+
+        return Vec3d.ofBottomCenter(BlockPos(x, y, z))
     }
 
     private fun centerTarget(region: RegionData): Vec3d {

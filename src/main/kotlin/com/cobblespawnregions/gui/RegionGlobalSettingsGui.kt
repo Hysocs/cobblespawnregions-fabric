@@ -15,6 +15,7 @@ object RegionGlobalSettingsGui {
     private object Slots {
         const val DEBUG = 11
         const val SHOW_UNIMPLEMENTED = 13
+        const val KILL_TRACKED_ON_STOP = 15
         const val SHOW_FORMS = 30
         const val SHOW_ASPECTS = 32
         const val BACK = 49
@@ -37,6 +38,7 @@ object RegionGlobalSettingsGui {
         when (ctx.slotIndex) {
             Slots.DEBUG -> config.debugEnabled = !config.debugEnabled
             Slots.SHOW_UNIMPLEMENTED -> config.showUnimplementedPokemonInGui = !config.showUnimplementedPokemonInGui
+            Slots.KILL_TRACKED_ON_STOP -> config.killTrackedPokemonOnServerStop = !config.killTrackedPokemonOnServerStop
             Slots.SHOW_FORMS -> config.showFormsInGui = !config.showFormsInGui
             Slots.SHOW_ASPECTS -> config.showAspectsInGui = !config.showAspectsInGui
             Slots.BACK -> {
@@ -66,6 +68,11 @@ object RegionGlobalSettingsGui {
             "Show Unimplemented Pokemon",
             config.showUnimplementedPokemonInGui,
             listOf("Includes Pokemon not currently implemented by Cobblemon in picker lists.")
+        )
+        layout[Slots.KILL_TRACKED_ON_STOP] = toggleItem(
+            "Kill CSR Pokemon On Stop",
+            config.killTrackedPokemonOnServerStop,
+            listOf("Removes loaded CSR-spawned Pokemon when the server stops.", "Clears CSR tracked spawn counts before shutdown.")
         )
         layout[Slots.SHOW_FORMS] = toggleItem(
             "Show Forms",

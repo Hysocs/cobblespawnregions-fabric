@@ -335,6 +335,34 @@ object RegionSpawnHelper {
         return selected?.let(BlockPos::fromLong)
     }
 
+    fun pickClosestSpawnPos(regionId: String, allowedBlocks: List<String>, origin: net.minecraft.util.math.Vec3d): BlockPos? {
+        val region = RegionsConfig.getRegion(regionId) ?: return null
+        if (SpawnPointStore.size(regionId) == 0) return null
+
+        val priorityRegions = RegionsConfig.regionsInPriorityOrder()
+        val matcher = matcherFor(allowedBlocks)
+        var closest: Long? = null
+        var closestDistanceSq = Double.MAX_VALUE
+
+        SpawnPointStore.forEachRaw(regionId) { posLong, blockId, type ->
+            if (!matcher.matches(blockId, type)) return@forEachRaw
+
+            val pos = BlockPos.fromLong(posLong)
+            if (!isControllingRegion(regionId, pos, region.dimension, priorityRegions)) return@forEachRaw
+
+            val dx = pos.x + 0.5 - origin.x
+            val dy = pos.y.toDouble() - origin.y
+            val dz = pos.z + 0.5 - origin.z
+            val distanceSq = dx * dx + dy * dy + dz * dz
+            if (distanceSq < closestDistanceSq) {
+                closestDistanceSq = distanceSq
+                closest = posLong
+            }
+        }
+
+        return closest?.let(BlockPos::fromLong)
+    }
+
     private fun isControllingRegion(
         regionId: String,
         pos: BlockPos,

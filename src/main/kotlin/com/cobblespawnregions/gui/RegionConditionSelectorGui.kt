@@ -111,7 +111,7 @@ object RegionConditionSelectorGui {
                 Text.literal("§7Click to toggle this condition in"),
                 Text.literal("§7exclusionConditions.")
             ),
-            Textures.COND
+            AlphabetHeadTextures.forFirstLetter(condition, Textures.COND)
         )
         if (isBlocked) CustomGui.addEnchantmentGlint(item)
         return item

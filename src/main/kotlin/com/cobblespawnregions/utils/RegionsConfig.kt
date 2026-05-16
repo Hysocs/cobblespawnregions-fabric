@@ -128,7 +128,7 @@ data class PokemonSpawnEntry(
 // ── Region data classes ───────────────────────────────────────────────────────
 
 data class RegionData(
-    override val version: String = "1.0.0",
+    override val version: String = "1.0.1",
     override val configId: String = "cobblespawnregions",
     val regionId: String = "",
     var regionName: String = "unnamed_region",
@@ -148,12 +148,13 @@ data class RegionData(
 ) : ConfigData
 
 data class RegionsMainConfig(
-    override val version: String = "1.0.0",
+    override val version: String = "1.0.1",
     override val configId: String = "cobblespawnregions",
     var debugEnabled: Boolean = false,
     var showUnimplementedPokemonInGui: Boolean = false,
     var showFormsInGui: Boolean = true,
-    var showAspectsInGui: Boolean = true
+    var showAspectsInGui: Boolean = true,
+    var killTrackedPokemonOnServerStop: Boolean = false
 ) : ConfigData
 
 // ── Config manager ────────────────────────────────────────────────────────────
@@ -162,7 +163,7 @@ object RegionsConfig {
 
     private val logger = LoggerFactory.getLogger("RegionsConfig")
     private const val MOD_ID = "cobblespawnregions"
-    private const val CURRENT_VERSION = "1.0.0"
+    private const val CURRENT_VERSION = "1.0.1"
 
     private val modConfigDir = File("config/cobblespawnregions")
     private val regionsDir = File(modConfigDir, "regions")
@@ -507,6 +508,10 @@ object RegionsConfig {
             entry.spawnSettings = SpawnSettings(allowedBlocks = listOf("#solid", "#water", "#air"))
         }
         if (entry.wanderingSettings == null) entry.wanderingSettings = RegionWanderingSettings()
+        entry.wanderingSettings.returnTarget = when (entry.wanderingSettings.returnTarget.uppercase()) {
+            "CENTER", "CLOSEST" -> entry.wanderingSettings.returnTarget.uppercase()
+            else -> "RANDOM"
+        }
         if (entry.heldItemsOnSpawn == null) entry.heldItemsOnSpawn = HeldItemsOnSpawn()
         if (entry.minLevel <= 0) entry.minLevel = 1
         if (entry.maxLevel <= 0) entry.maxLevel = 100

@@ -42,10 +42,13 @@ object RegionPokemonEntryGui {
     }
 
     private object Textures {
-        const val DEC = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTMzYWQ1YzIyZGIxNjQzNWRhYWQ2MTU5MGFiYTUxZDkzNzkxNDJkZDU1NmQ2YzQyMmE3MTEwY2EzYWJlYTUwIn19fQ=="
-        const val INC = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGU0MDNjYzdiYmFjNzM2NzBiZDU0M2Y2YjA5NTViYWU3YjhlOTEyM2Q4M2JkNzYwZjYyMDRjNWFmZDhiZTdlMSJ9fX0="
         const val BACK = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
-        const val BLOCKS = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ4YjUxZGM5NTljMzNjMjUxNWJhZDY1ODk5N2Y2Y2VlOWY4NmRmMGU3ODdiNmM2ZjhkNTA3MDY0N2JkYyJ9fX0="
+        const val SPAWN_BLOCKS = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTNlOTlhNmZkMDQ2NGUwNjhjZDY5ZjNmZGRkMDNiYmFiOTA5YWNlNGY5YzNjNmFmYTFmOTQ3ZWNmODVjMjRmYiJ9fX0="
+        const val RETURN_TARGET = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTJiOWFiZmM4ODE4MzUzNWE1ZGUwNjcxNTY3ZGJhMGY3ZmM4YzI3MzM4OGVmN2FjMjhiNmRjMzBiZDUxZmI3In19fQ=="
+        const val MAX_COUNT_ICON = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNWZhMWM2YzdlYWQ3NWEwNDU4NTM5NWY2MzEzNWRjOTZmYTA3OGZiOTIwNDg0Njk5ZWY4ZTU2NGUxNDJkNjRjYiJ9fX0="
+        const val RETURN_SPEED = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGExZDU1YjNmOTg5NDEwYTM0NzUyNjUwZTI0OGM5YjZjMTc4M2E3ZWMyYWEzZmQ3Nzg3YmRjNGQwZTYzN2QzOSJ9fX0="
+        const val STAY_IN_REGION = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2VkMWFiYTczZjYzOWY0YmM0MmJkNDgxOTZjNzE1MTk3YmUyNzEyYzNiOTYyYzk3ZWJmOWU5ZWQ4ZWZhMDI1In19fQ=="
+        const val DELAY = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvY2NjNmUxMGRiNDBiNGU4MzM0MTdkZmQ1NzZiOWE4MGZhMzY2NjI1MTFhMmY2Y2U0Y2IwY2YyZWY3NmI3N2ZlMyJ9fX0="
         const val IV = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDg4M2Q2NTZlNDljMzhjNmI1Mzc4NTcyZjMxYzYzYzRjN2E1ZGQ0Mzc1YjZlY2JjYTQzZjU5NzFjMmNjNGZmIn19fQ=="
         const val EV = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODM0NTI5NjRmMWNiYjg5MTQ2Njg0YWE1NTYzOTBhOThjZjM0MmNhOTdjZWZhNmE5Mjk0YTVkMzZlZGQ5MzBmOSJ9fX0="
         const val SPAWN = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjdkNmJlMWRjYTUzNTJhNTY5M2UyOWVhMzVkODA2YjJhMjdjNGE5N2I2NGVlYmJmNjMyYzk5OGQ1OTQ4ZjFjNCJ9fX0="
@@ -111,7 +114,11 @@ object RegionPokemonEntryGui {
                 it.enabled = !it.enabled
             }
             Slots.WANDER_TARGET -> updateWandering(player, regionId, pokemonName, formName, aspects) {
-                it.returnTarget = if (it.returnTarget.equals("CENTER", ignoreCase = true)) "RANDOM" else "CENTER"
+                it.returnTarget = when (it.returnTarget.uppercase()) {
+                    "RANDOM" -> "CENTER"
+                    "CENTER" -> "CLOSEST"
+                    else -> "RANDOM"
+                }
             }
             Slots.WANDER_SPEED -> updateWandering(player, regionId, pokemonName, formName, aspects) {
                 val delta = if (ctx.clickType == ClickType.RIGHT) -0.1 else 0.1
@@ -220,7 +227,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§7Left-click: §a+1"),
                 Text.literal("§7Right-click: §c-1")
             ),
-            Textures.INC
+            Textures.MAX_COUNT_ICON
         )
 
     private fun spawnBlocksBtn(entry: com.cobblespawnregions.utils.PokemonSpawnEntry?): ItemStack =
@@ -233,7 +240,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§8(0 = any block)"),
                 Text.literal("§eClick to edit")
             ),
-            Textures.BLOCKS
+            Textures.SPAWN_BLOCKS
         )
 
     private fun wanderToggleBtn(entry: com.cobblespawnregions.utils.PokemonSpawnEntry?): ItemStack =
@@ -245,7 +252,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§eCurrent: ${if (entry?.wanderingSettings?.enabled != false) "§aON" else "§cOFF"}"),
                 Text.literal("§eClick to toggle")
             ),
-            Textures.BLOCKS
+            Textures.STAY_IN_REGION
         )
 
     private fun wanderTargetBtn(entry: com.cobblespawnregions.utils.PokemonSpawnEntry?): ItemStack =
@@ -257,7 +264,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§eCurrent: §f${entry?.wanderingSettings?.returnTarget ?: "RANDOM"}"),
                 Text.literal("§eClick to switch")
             ),
-            Textures.BLOCKS
+            Textures.RETURN_TARGET
         )
 
     private fun wanderSpeedBtn(entry: com.cobblespawnregions.utils.PokemonSpawnEntry?): ItemStack =
@@ -269,7 +276,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§7Left-click: §a+0.1"),
                 Text.literal("§7Right-click: §c-0.1")
             ),
-            Textures.INC
+            Textures.RETURN_SPEED
         )
 
     private fun wanderDelayBtn(entry: com.cobblespawnregions.utils.PokemonSpawnEntry?): ItemStack =
@@ -281,7 +288,7 @@ object RegionPokemonEntryGui {
                 Text.literal("§7Left-click: §a+1"),
                 Text.literal("§7Right-click: §c-1")
             ),
-            Textures.DEC
+            Textures.DELAY
         )
 
     private fun backBtn(): ItemStack =
