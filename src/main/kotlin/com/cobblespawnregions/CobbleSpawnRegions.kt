@@ -26,6 +26,7 @@ import net.minecraft.registry.RegistryKey
 import net.minecraft.registry.RegistryKeys
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.network.ServerPlayerEntity
+import net.minecraft.server.world.ChunkTicketType
 import net.minecraft.server.world.ServerWorld
 import net.minecraft.text.Text
 import net.minecraft.util.ActionResult
@@ -36,6 +37,7 @@ import net.minecraft.util.math.ChunkPos
 import net.minecraft.world.World
 import org.slf4j.LoggerFactory
 import java.util.UUID
+import java.util.Comparator
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -57,6 +59,8 @@ object CobbleSpawnRegions : ModInitializer {
 
     private val logger = LoggerFactory.getLogger("cobblespawnregions")
     const val MOD_ID = "cobblespawnregions"
+    val REGION_TICKET_TYPE: ChunkTicketType<String> =
+        ChunkTicketType.create("cobblespawnregions:region_ticket", Comparator.naturalOrder<String>())
     private val battleTracker = RegionBattleTracker()
     private val catchingTracker = RegionCatchingTracker()
 
@@ -69,9 +73,8 @@ object CobbleSpawnRegions : ModInitializer {
     private val dimensionKeyCache = ConcurrentHashMap<String, RegistryKey<World>>()
 
     override fun onInitialize() {
-        logger.info("Initializing CobbleSpawnRegions")
-
         RegionsConfig.initializeAndLoad()
+        RegionsConfig.debugLog(logger, "Initializing CobbleSpawnRegions")
         RegionEntityTracker.loadFromDisk()
         RegionCommands.register()
         battleTracker.registerEvents()
@@ -92,7 +95,12 @@ object CobbleSpawnRegions : ModInitializer {
                 val box    = RegionSpawnHelper.regionBoundingBox(region)
                 RegionEntityTracker.rebuildFromWorld(rWorld, region.regionId, box)
                 reconcileLoadedRegionChunks(rWorld, region)
-                logger.info(
+                if (region.forceChunkLoading) {
+                    val added = setRegionChunkTickets(rWorld, region, true, respectCap = true)
+                    RegionsConfig.debugLog(logger, "[CSR] Region '${region.regionId}' added $added chunk ticket(s).")
+                }
+                RegionsConfig.debugLog(
+                    logger,
                     "[CSR] Tracker rebuilt for '${region.regionId}': " +
                             "${RegionEntityTracker.countTotal(region.regionId)} entity/ies tracked."
                 )
@@ -140,7 +148,7 @@ object CobbleSpawnRegions : ModInitializer {
             if (RegionsConfig.config.killTrackedPokemonOnServerStop) {
                 val removed = removeLoadedTrackedPokemon(server)
                 RegionEntityTracker.clearAllAndMarkDirty()
-                logger.info("[CSR] Removed $removed loaded tracked Pokemon on server stop.")
+                RegionsConfig.debugLog(logger, "[CSR] Removed $removed loaded tracked Pokemon on server stop.")
             }
             RegionEntityTracker.flushIfDirty()
             playerSelections.clear()
@@ -252,11 +260,22 @@ object CobbleSpawnRegions : ModInitializer {
 
             val world = server.getWorld(parseDimension(region.dimension)) ?: continue
             try {
-                RegionSpawnHelper.attemptSpawnInRegion(world, region, respectTimer = false)
+                if (region.requirePlayerInRange && !hasPlayerNearRegion(world, region)) {
+                    val nextRegionDueAt = RegionSpawnHelper.nextSpawnDueAt(region)
+                    if (nextRegionDueAt < nextDueAt) nextDueAt = nextRegionDueAt
+                    continue
+                }
+
+                RegionSpawnHelper.attemptSpawnInRegion(
+                    world,
+                    region,
+                    amount = region.spawnAmountPerSpawn.coerceAtLeast(1),
+                    respectTimer = false
+                )
                 val nextRegionDueAt = RegionSpawnHelper.nextSpawnDueAt(region)
                 if (nextRegionDueAt < nextDueAt) nextDueAt = nextRegionDueAt
             } catch (e: Exception) {
-                logger.error("Error spawning for region '${region.regionId}'", e)
+                RegionsConfig.debugError(logger, "Error spawning for region '${region.regionId}'", e)
             }
         }
 
@@ -265,6 +284,51 @@ object CobbleSpawnRegions : ModInitializer {
             hasActiveRegion -> now + 1_000L
             else -> now + 5_000L
         }
+    }
+
+    private fun hasPlayerNearRegion(world: ServerWorld, region: RegionData): Boolean {
+        val range = region.playerActivationRange.coerceAtLeast(0.0)
+        val minX = minOf(region.pos1.x, region.pos2.x).toDouble() - range
+        val minY = minOf(region.pos1.y, region.pos2.y).toDouble() - range
+        val minZ = minOf(region.pos1.z, region.pos2.z).toDouble() - range
+        val maxX = maxOf(region.pos1.x, region.pos2.x).toDouble() + 1.0 + range
+        val maxY = maxOf(region.pos1.y, region.pos2.y).toDouble() + 1.0 + range
+        val maxZ = maxOf(region.pos1.z, region.pos2.z).toDouble() + 1.0 + range
+
+        return world.players.any { player ->
+            player.x in minX..maxX && player.y in minY..maxY && player.z in minZ..maxZ
+        }
+    }
+
+    fun setRegionChunkTickets(
+        world: ServerWorld,
+        region: RegionData,
+        enabled: Boolean,
+        respectCap: Boolean
+    ): Int {
+        var changed = 0
+        var visited = 0
+        val maxTickets = if (enabled && respectCap) region.maxForceLoadedChunks.coerceAtLeast(1) else Int.MAX_VALUE
+        val radius = region.chunkLoadRadius.coerceAtLeast(1)
+        val minCX = minOf(region.pos1.x, region.pos2.x) shr 4
+        val maxCX = maxOf(region.pos1.x, region.pos2.x) shr 4
+        val minCZ = minOf(region.pos1.z, region.pos2.z) shr 4
+        val maxCZ = maxOf(region.pos1.z, region.pos2.z) shr 4
+
+        for (cx in minCX..maxCX) {
+            for (cz in minCZ..maxCZ) {
+                if (visited >= maxTickets) return changed
+                visited++
+                val chunkPos = ChunkPos(cx, cz)
+                if (enabled) {
+                    world.chunkManager.addTicket(REGION_TICKET_TYPE, chunkPos, radius, region.regionId)
+                } else {
+                    world.chunkManager.removeTicket(REGION_TICKET_TYPE, chunkPos, radius, region.regionId)
+                }
+                changed++
+            }
+        }
+        return changed
     }
 
     private fun reconcileLoadedRegionChunks(world: ServerWorld, region: RegionData) {
@@ -306,7 +370,7 @@ object CobbleSpawnRegions : ModInitializer {
         dimensionKeyCache[str]?.let { return it }
         val parts = str.split(":")
         val key = if (parts.size != 2) {
-            logger.warn("Invalid dimension '$str', using 'minecraft:overworld'")
+            RegionsConfig.debugWarn(logger, "Invalid dimension '$str', using 'minecraft:overworld'")
             RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"))
         } else {
             RegistryKey.of(RegistryKeys.WORLD, Identifier.of(parts[0], parts[1]))
@@ -386,7 +450,7 @@ object CobbleSpawnRegions : ModInitializer {
     fun requestParticleUpdate(player: ServerPlayerEntity, reason: String, logRequest: Boolean = false) {
         particleUpdatePlayers.add(player.uuid)
         if (logRequest) {
-            logger.info("[CSR-VISUAL] ${player.name.string} (${player.uuid}) requested visual update: $reason")
+            RegionsConfig.debugLog(logger, "[CSR-VISUAL] ${player.name.string} (${player.uuid}) requested visual update: $reason")
         }
     }
 

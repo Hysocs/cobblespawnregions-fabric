@@ -100,8 +100,10 @@ object RegionEditorGui {
         "region_${region.regionId}",
         Text.literal(region.regionName).formatted(Formatting.YELLOW),
         listOf(
-            Text.literal("§8${region.regionId}  [${region.mode}]"),
+            Text.literal("§8${region.regionId}"),
+            Text.literal("§7Mode: §f${region.mode}"),
             Text.literal("§7Dimension: §f${region.dimension}"),
+            Text.literal(boundsLine(region)),
             Text.literal("§7Priority: §f${region.priority}"),
             Text.literal(""),
             Text.literal("§8Higher priority controls overlapping positions.")
@@ -190,6 +192,9 @@ object RegionEditorGui {
     }
 
     private fun flag(b: Boolean) = if (b) "§atrue" else "§cfalse"
+    private fun boundsLine(region: RegionData): String =
+        "§7Bounds: §f(${region.pos1.x}, ${region.pos1.y}, ${region.pos1.z}) -> " +
+                "(${region.pos2.x}, ${region.pos2.y}, ${region.pos2.z})"
     private fun glass() = ItemStack(Items.CYAN_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
     private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
 }

@@ -15,6 +15,7 @@ import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import kotlinx.coroutines.runBlocking
 import net.minecraft.util.math.BlockPos
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Paths
@@ -102,7 +103,7 @@ data class HeldItemsOnSpawn(
 data class RegionWanderingSettings(
     var enabled: Boolean = true,
     var returnTarget: String = "RANDOM",
-    var speed: Double = 1.0,
+    var speed: Double = 0.5,
     var tickDelay: Int = 10
 )
 
@@ -140,6 +141,12 @@ data class RegionData(
 
     // Spawn control
     var spawnTimerTicks: Long = 200,
+    var spawnAmountPerSpawn: Int = 1,
+    var requirePlayerInRange: Boolean = false,
+    var playerActivationRange: Double = 64.0,
+    var forceChunkLoading: Boolean = false,
+    var chunkLoadRadius: Int = 1,
+    var maxForceLoadedChunks: Int = 25,
     var selectedPokemon: MutableList<PokemonSpawnEntry> = mutableListOf(),
 
     var spawnRestrictions: RegionRestrictionConfig = RegionRestrictionConfig(),
@@ -154,8 +161,47 @@ data class RegionsMainConfig(
     var showUnimplementedPokemonInGui: Boolean = false,
     var showFormsInGui: Boolean = true,
     var showAspectsInGui: Boolean = true,
-    var killTrackedPokemonOnServerStop: Boolean = false
+    var killTrackedPokemonOnServerStop: Boolean = false,
+    var commandPermissions: MutableMap<String, String> = defaultCommandPermissions().toMutableMap()
 ) : ConfigData
+
+fun defaultCommandPermissions(): Map<String, String> = linkedMapOf(
+    "csr" to "cobblespawnregions.command.csr",
+    "giveclaimstick" to "cobblespawnregions.command.giveclaimstick",
+    "create" to "cobblespawnregions.command.create",
+    "list" to "cobblespawnregions.command.list",
+    "delete" to "cobblespawnregions.command.delete",
+    "visualize" to "cobblespawnregions.command.visualize",
+    "edit" to "cobblespawnregions.command.edit",
+    "teleport" to "cobblespawnregions.command.teleport",
+    "tp" to "cobblespawnregions.command.tp",
+    "killspawned" to "cobblespawnregions.command.killspawned",
+    "addmon" to "cobblespawnregions.command.addmon",
+    "removemon" to "cobblespawnregions.command.removemon",
+    "rename" to "cobblespawnregions.command.rename",
+    "inspectnearest" to "cobblespawnregions.command.inspectnearest",
+    "forcespawn" to "cobblespawnregions.command.forcespawn",
+    "info" to "cobblespawnregions.command.info",
+    "clone" to "cobblespawnregions.command.clone",
+    "setspawnamount" to "cobblespawnregions.command.setspawnamount",
+    "playeractivation" to "cobblespawnregions.command.playeractivation",
+    "forcechunks" to "cobblespawnregions.command.forcechunks",
+    "priority" to "cobblespawnregions.command.priority",
+    "gui" to "cobblespawnregions.command.gui",
+    "check" to "cobblespawnregions.command.check",
+    "editgui" to "cobblespawnregions.command.editgui",
+    "reload" to "cobblespawnregions.command.reload",
+    "region" to "cobblespawnregions.command.region",
+    "region.create" to "cobblespawnregions.command.region.create",
+    "region.list" to "cobblespawnregions.command.region.list",
+    "region.delete" to "cobblespawnregions.command.region.delete",
+    "region.visualize" to "cobblespawnregions.command.region.visualize",
+    "region.editgui" to "cobblespawnregions.command.region.editgui",
+    "region.teleport" to "cobblespawnregions.command.region.teleport",
+    "region.tp" to "cobblespawnregions.command.region.tp",
+    "region.killspawned" to "cobblespawnregions.command.region.killspawned",
+    "region.priority" to "cobblespawnregions.command.region.priority"
+)
 
 // ── Config manager ────────────────────────────────────────────────────────────
 
@@ -216,7 +262,7 @@ object RegionsConfig {
         updateDebugState()
         runBlocking { loadRegionsFromDisk() }
         isInitialized = true
-        logger.info("RegionsConfig initialized — ${regionFileMap.size} region(s) loaded.")
+        debugLog(logger, "RegionsConfig initialized: ${regionFileMap.size} region(s) loaded.")
     }
 
     fun reloadBlocking() {
@@ -233,6 +279,24 @@ object RegionsConfig {
         if (!::configManager.isInitialized) return
         runBlocking { configManager.saveConfig(config) }
         updateDebugState()
+    }
+
+    fun commandPermission(key: String): String =
+        config.commandPermissions.getOrPut(key) {
+            defaultCommandPermissions()[key] ?: "cobblespawnregions.command.${key.replace('.', '-')}"
+        }
+
+    fun debugLog(logger: Logger, message: String) {
+        if (config.debugEnabled) logger.info(message)
+    }
+
+    fun debugWarn(logger: Logger, message: String) {
+        if (config.debugEnabled) logger.warn(message)
+    }
+
+    fun debugError(logger: Logger, message: String, throwable: Throwable? = null) {
+        if (!config.debugEnabled) return
+        if (throwable == null) logger.error(message) else logger.error(message, throwable)
     }
 
     // ── Disk I/O ──────────────────────────────────────────────────────────────
@@ -259,7 +323,7 @@ object RegionsConfig {
                 configManager.saveSecondaryConfig(relativeName, raw)
                 invalidateRegionCaches()
             } catch (e: Exception) {
-                logger.error("Failed to load region file: ${file.name}", e)
+                debugError(logger, "Failed to load region file: ${file.name}", e)
             }
         }
     }
@@ -290,6 +354,9 @@ object RegionsConfig {
         invalidateRegionCaches()
         return true
     }
+
+    fun renameRegionDisplay(regionId: String, newName: String): RegionData? =
+        updateRegion(regionId) { it.regionName = newName }
 
     fun getRegion(regionId: String): RegionData? {
         val fn = regionFileMap[regionId] ?: return null
@@ -485,6 +552,10 @@ object RegionsConfig {
     private fun normalizeRegion(region: RegionData) {
         if (region.selectedPokemon == null) region.selectedPokemon = mutableListOf()
         if (region.spawnRestrictions == null) region.spawnRestrictions = RegionRestrictionConfig()
+        if (region.spawnAmountPerSpawn <= 0) region.spawnAmountPerSpawn = 1
+        if (region.playerActivationRange < 0.0) region.playerActivationRange = 64.0
+        if (region.chunkLoadRadius <= 0) region.chunkLoadRadius = 1
+        if (region.maxForceLoadedChunks <= 0) region.maxForceLoadedChunks = 25
         normalizeRestrictions(region.spawnRestrictions)
         region.selectedPokemon.forEach(::normalizePokemonEntry)
     }

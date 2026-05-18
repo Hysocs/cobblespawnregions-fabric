@@ -46,8 +46,10 @@ object RegionParticleUtils {
     }
 
     private val activeVisualStates = ConcurrentHashMap<UUID, PlayerVisualState>()
+    private val spawnParticleLastSentAt = ConcurrentHashMap<String, Long>()
 
     private const val SPAWN_PARTICLE_RADIUS_SQ = 25.0 * 25.0
+    private const val SPAWN_PARTICLE_INTERVAL_MS = 2_000L
 
     private data class RegionVisualPalette(
         val face: BlockState,
@@ -79,6 +81,7 @@ object RegionParticleUtils {
             if (player == null) {
                 CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
                 activeVisualStates.remove(uuid)
+                clearSpawnParticleState(uuid)
                 return@forEach
             }
 
@@ -138,14 +141,21 @@ object RegionParticleUtils {
                 }
                 it.remove()
                 CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
+                clearSpawnParticleState(uuid)
             }
         }
 
         playersToCheck.forEach { uuid ->
             if (uuid !in playersToUpdate && !activeVisualStates.containsKey(uuid)) {
                 CobbleSpawnRegions.particleUpdatePlayers.remove(uuid)
+                clearSpawnParticleState(uuid)
             }
         }
+    }
+
+    private fun clearSpawnParticleState(uuid: UUID) {
+        val prefix = "$uuid:"
+        spawnParticleLastSentAt.keys.removeIf { it.startsWith(prefix) }
     }
 
     // ── Region outline rendering ───────────────────────────────────────────────
@@ -224,6 +234,12 @@ object RegionParticleUtils {
      *   WATER → BUBBLE (blue)           – single at the water block
      */
     private fun spawnPointParticles(player: ServerPlayerEntity, regionId: String) {
+        val now = System.currentTimeMillis()
+        val stateKey = "${player.uuid}:$regionId"
+        val lastSentAt = spawnParticleLastSentAt[stateKey] ?: 0L
+        if (now - lastSentAt < SPAWN_PARTICLE_INTERVAL_MS) return
+        spawnParticleLastSentAt[stateKey] = now
+
         val region = RegionsConfig.getRegion(regionId) ?: return
         val px = player.x; val py = player.y; val pz = player.z
 

@@ -202,6 +202,8 @@ object RegionEntityTracker {
                     .add(record.spawnId)
                 spawnRecords[record.spawnId] = record
             }
+        }.onFailure {
+            RegionsConfig.debugError(logger, "Failed to load tracked spawns", it)
         }
         dirty.set(false)
     }
@@ -214,7 +216,7 @@ object RegionEntityTracker {
                 saveToDisk()
             }.onFailure {
                 dirty.set(true)
-                logger.error("Failed to save tracked spawns", it)
+                RegionsConfig.debugError(logger, "Failed to save tracked spawns", it)
             }
         }
     }

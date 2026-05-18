@@ -84,7 +84,9 @@ object PokemonConditionExtractor {
                     if (resolved != null) conditionList.add("move=$resolved")
                 }
             }
-        } catch (_: Exception) { /* moveset may not be initialized yet */ }
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to extract moveset conditions for ${pokemon.species.name}", e)
+        }
 
         return conditionList
             .filter { it.contains("=") || it.contains(":") }
@@ -117,7 +119,7 @@ object PokemonConditionExtractor {
             return conditions
 
         } catch (e: Exception) {
-            logger.error("Failed to scan species: $speciesName", e)
+            RegionsConfig.debugError(logger, "Failed to scan species: $speciesName", e)
             return emptyList()
         }
     }
@@ -186,7 +188,9 @@ object PokemonConditionExtractor {
                         if (deep != null) return deep
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                RegionsConfig.debugError(logger, "Failed to resolve property '$propName' on ${obj::class.qualifiedName}", e)
+            }
         }
 
         // Method 2: If it's an Iterable, try to resolve each element into a comma-joined list
@@ -202,11 +206,15 @@ object PokemonConditionExtractor {
                     val v = prop.getter.call(obj)
                     if (v is String && v.isNotBlank() && !v.contains("@") && v.length > 1 && v.length < 100) v
                     else null
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    RegionsConfig.debugError(logger, "Failed to inspect fallback property '${prop.name}' on ${obj::class.qualifiedName}", e)
                     null
                 }
             }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to inspect fallback properties on ${obj::class.qualifiedName}", e)
+            null
+        }
     }
 
     /**
@@ -269,9 +277,13 @@ object PokemonConditionExtractor {
                             }
                         }
                     }
-                } catch (_: Exception) { }
+                } catch (e: Exception) {
+                    RegionsConfig.debugError(logger, "Failed to extract condition property '${prop.name}' from ${obj::class.qualifiedName}", e)
+                }
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to extract raw conditions from ${obj::class.qualifiedName}", e)
+        }
         return results
     }
 }

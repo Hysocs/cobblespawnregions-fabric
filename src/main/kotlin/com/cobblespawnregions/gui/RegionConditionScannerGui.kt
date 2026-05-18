@@ -14,10 +14,12 @@ import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import org.joml.Vector4f
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
 object RegionConditionScannerGui {
 
+    private val logger = LoggerFactory.getLogger("RegionConditionScannerGui")
     private const val PAGE_SIZE = 45
     private val playerPages = ConcurrentHashMap<ServerPlayerEntity, Int>()
 
@@ -118,7 +120,10 @@ object RegionConditionScannerGui {
         val item = try {
             val pokemon = PokemonProperties.parse(species.name.lowercase()).create()
             PokemonItem.from(pokemon, tint = Vector4f(1f, 1f, 1f, 1f))
-        } catch (_: Exception) { ItemStack(Items.BARRIER) }
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to build species item for ${species.name}", e)
+            ItemStack(Items.BARRIER)
+        }
 
         item.setCustomName(Text.literal(species.name).formatted(Formatting.GOLD))
         CustomGui.setItemLore(item, listOf(

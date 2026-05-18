@@ -1,6 +1,7 @@
 package com.cobblespawnregions.gui
 
 import com.cobblespawnregions.CobbleSpawnRegions
+import com.cobblespawnregions.utils.RegionData
 import com.cobblespawnregions.utils.RegionsConfig
 import com.cobblespawnregions.utils.SpawnPointStore
 import com.everlastingutils.gui.CustomGui
@@ -93,8 +94,10 @@ object RegionDeleteGui {
                 "delete_region_${region.regionId}",
                 Text.literal(region.regionName).formatted(Formatting.YELLOW),
                 listOf(
-                    Text.literal("§8${region.regionId}  [${region.mode}]"),
+                    Text.literal("§8${region.regionId}"),
+                    Text.literal("§7Mode: §f${region.mode}"),
                     Text.literal("§7Dimension: §f${region.dimension}"),
+                    Text.literal(boundsLine(region)),
                     Text.literal("§7Priority: §f${region.priority}"),
                     Text.literal("§7Custom Spawns: §f${region.selectedPokemon.size}")
                 ),
@@ -127,6 +130,10 @@ object RegionDeleteGui {
         listOf(Text.literal("§7Return to region list")),
         Textures.BACK
     )
+
+    private fun boundsLine(region: RegionData): String =
+        "§7Bounds: §f(${region.pos1.x}, ${region.pos1.y}, ${region.pos1.z}) -> " +
+                "(${region.pos2.x}, ${region.pos2.y}, ${region.pos2.z})"
 
     private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }
 }

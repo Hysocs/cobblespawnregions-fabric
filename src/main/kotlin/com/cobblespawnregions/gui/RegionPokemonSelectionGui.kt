@@ -19,6 +19,7 @@ import net.minecraft.text.Text
 import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 import org.joml.Vector4f
+import org.slf4j.LoggerFactory
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,6 +39,8 @@ enum class RegionSortMethod { ALPHABETICAL, TYPE, SELECTED, SEARCH }
  *   Slot 53 — Next page
  */
 object RegionPokemonSelectionGui {
+
+    private val logger = LoggerFactory.getLogger("RegionPokemonSelectionGui")
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -196,6 +199,7 @@ object RegionPokemonSelectionGui {
                 RegionsConfig.addPokemonToRegion(regionId, entry)
                 player.sendMessage(Text.literal("§a[CSR] Added ${species.name} to region."), false)
             } catch (e: IllegalArgumentException) {
+                RegionsConfig.debugError(logger, "Failed to create default Pokemon entry for $showdownId", e)
                 player.sendMessage(Text.literal("§c[CSR] ${e.message}"), false)
                 return
             }

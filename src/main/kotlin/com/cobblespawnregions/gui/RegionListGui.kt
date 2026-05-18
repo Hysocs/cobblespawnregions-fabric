@@ -86,8 +86,10 @@ object RegionListGui {
             "region_${r.regionId}",
             Text.literal(r.regionName).formatted(Formatting.YELLOW),
             listOf(
-                Text.literal("§8${r.regionId}  [${r.mode}]"),
+                Text.literal("§8${r.regionId}"),
+                Text.literal("§7Mode: §f${r.mode}"),
                 Text.literal("§7Dimension: §f${r.dimension}"),
+                Text.literal(boundsLine(r)),
                 Text.literal("§7Priority: §f${r.priority}"),
                 Text.literal("§8Higher priority controls overlaps."),
                 Text.literal("§7Disable All: ${flag(restr.disableAll)}"),
@@ -117,6 +119,10 @@ object RegionListGui {
         ),
         Textures.SETTINGS
     )
+
+    private fun boundsLine(region: RegionData): String =
+        "§7Bounds: §f(${region.pos1.x}, ${region.pos1.y}, ${region.pos1.z}) -> " +
+                "(${region.pos2.x}, ${region.pos2.y}, ${region.pos2.z})"
 
     private fun flag(b: Boolean) = if (b) "§atrue" else "§cfalse"
     private fun filler() = ItemStack(Items.GRAY_STAINED_GLASS_PANE).apply { setCustomName(Text.literal(" ")) }

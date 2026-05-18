@@ -161,41 +161,41 @@ object RegionSpawnHelper {
         // ── 1. Chunk check ────────────────────────────────────────────────────
         val chunk = world.getChunk(spawnPos.x shr 4, spawnPos.z shr 4, ChunkStatus.FULL, false)
         if (chunk == null) {
-            logger.warn("[CSR-SPAWN] FAIL — chunk not loaded at $spawnPos")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] FAIL: chunk not loaded at $spawnPos")
             return null
         }
-        logger.debug("[CSR-SPAWN] Chunk loaded at cx=${spawnPos.x shr 4} cz=${spawnPos.z shr 4}")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Chunk loaded at cx=${spawnPos.x shr 4} cz=${spawnPos.z shr 4}")
 
         // ── 2. Species lookup ─────────────────────────────────────────────────
         val sanitized = entry.pokemonName.replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
         val species = PokemonSpecies.getByName(sanitized) ?: run {
-            logger.warn("[CSR-SPAWN] FAIL — species '$sanitized' not found in registry")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] FAIL: species '$sanitized' not found in registry")
             return null
         }
-        logger.debug("[CSR-SPAWN] Species resolved: ${species.name}")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Species resolved: ${species.name}")
 
         // ── 3. Position diagnostics ───────────────────────────────────────────
         val blockAtFeet  = world.getBlockState(spawnPos)
         val blockAbove   = world.getBlockState(spawnPos.up())
         val blockAbove2  = world.getBlockState(spawnPos.up(2))
         val blockBelow   = world.getBlockState(spawnPos.down())
-        logger.debug("[CSR-SPAWN] Position $spawnPos diagnostics:")
-        logger.debug("  block below  (y-1): ${Registries.BLOCK.getId(blockBelow.block)}")
-        logger.debug("  block at feet (y+0): ${Registries.BLOCK.getId(blockAtFeet.block)}")
-        logger.debug("  block above  (y+1): ${Registries.BLOCK.getId(blockAbove.block)}")
-        logger.debug("  block above  (y+2): ${Registries.BLOCK.getId(blockAbove2.block)}")
-        logger.debug("  isAir@feet=${blockAtFeet.isAir}  isAir@+1=${blockAbove.isAir}  isAir@+2=${blockAbove2.isAir}")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Position $spawnPos diagnostics:")
+        RegionsConfig.debugLog(logger, "  block below  (y-1): ${Registries.BLOCK.getId(blockBelow.block)}")
+        RegionsConfig.debugLog(logger, "  block at feet (y+0): ${Registries.BLOCK.getId(blockAtFeet.block)}")
+        RegionsConfig.debugLog(logger, "  block above  (y+1): ${Registries.BLOCK.getId(blockAbove.block)}")
+        RegionsConfig.debugLog(logger, "  block above  (y+2): ${Registries.BLOCK.getId(blockAbove2.block)}")
+        RegionsConfig.debugLog(logger, "  isAir@feet=${blockAtFeet.isAir}  isAir@+1=${blockAbove.isAir}  isAir@+2=${blockAbove2.isAir}")
 
         if (!blockAtFeet.isAir && !blockAtFeet.isOf(net.minecraft.block.Blocks.WATER)) {
-            logger.warn("[CSR-SPAWN] WARNING — block at feet ($spawnPos) is not air/water: ${Registries.BLOCK.getId(blockAtFeet.block)}")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] WARNING: block at feet ($spawnPos) is not air/water: ${Registries.BLOCK.getId(blockAtFeet.block)}")
         }
 
         // ── 4. World border check ─────────────────────────────────────────────
         val border = world.worldBorder
         val inBorder = border.contains(spawnPos.x.toDouble(), spawnPos.z.toDouble())
-        logger.debug("[CSR-SPAWN] Inside world border: $inBorder (border size=${border.size})")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Inside world border: $inBorder (border size=${border.size})")
         if (!inBorder) {
-            logger.warn("[CSR-SPAWN] FAIL — position $spawnPos is outside the world border")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] FAIL: position $spawnPos is outside the world border")
             return null
         }
 
@@ -203,7 +203,7 @@ object RegionSpawnHelper {
         val level   = entry.minLevel + random.nextInt(entry.maxLevel - entry.minLevel + 1)
         val isShiny = entry.aspects.any { it.equals("shiny", ignoreCase = true) }
         val propsString = buildPropertiesString(sanitized, level, isShiny, entry, species)
-        logger.debug("[CSR-SPAWN] Properties string: $propsString")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Properties string: $propsString")
 
         val properties = PokemonProperties.parse(propsString)
         val entity     = properties.createEntity(world)
@@ -234,21 +234,21 @@ object RegionSpawnHelper {
 
         // ── 6. Bounding-box collision check ──────────────────────────────────
         val bb = entity.boundingBox
-        logger.debug("[CSR-SPAWN] Entity bounding box: minX=%.2f minY=%.2f minZ=%.2f maxX=%.2f maxY=%.2f maxZ=%.2f"
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Entity bounding box: minX=%.2f minY=%.2f minZ=%.2f maxX=%.2f maxY=%.2f maxZ=%.2f"
             .format(bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ))
 
         val collisions = world.getBlockCollisions(entity, bb).toList()
         if (collisions.isNotEmpty()) {
-            logger.warn("[CSR-SPAWN] WARNING — ${collisions.size} block collision(s) inside entity BB:")
-            collisions.take(5).forEach { logger.warn("  collision shape: $it") }
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] WARNING: ${collisions.size} block collision(s) inside entity BB:")
+            collisions.take(5).forEach { RegionsConfig.debugWarn(logger, "  collision shape: $it") }
         } else {
-            logger.debug("[CSR-SPAWN] No block collisions inside bounding box — clear to spawn")
+            RegionsConfig.debugLog(logger, "[CSR-SPAWN] No block collisions inside bounding box: clear to spawn")
         }
 
         // ── 7. spawnEntity call ───────────────────────────────────────────────
-        logger.debug("[CSR-SPAWN] Calling world.spawnEntity for '${pokemon.species.name}' lv$level at ($spawnX, $spawnY, $spawnZ)")
+        RegionsConfig.debugLog(logger, "[CSR-SPAWN] Calling world.spawnEntity for '${pokemon.species.name}' lv$level at ($spawnX, $spawnY, $spawnZ)")
         return if (world.spawnEntity(entity)) {
-            logger.debug("[CSR-SPAWN] SUCCESS — spawned '${pokemon.species.name}' lv$level @ $spawnPos")
+            RegionsConfig.debugLog(logger, "[CSR-SPAWN] SUCCESS: spawned '${pokemon.species.name}' lv$level @ $spawnPos")
 
             // ── 8. Track if this is a region-managed spawn ───────────────────
             if (regionId != null && entryKey != null && spawnId != null) {
@@ -263,7 +263,7 @@ object RegionSpawnHelper {
                     chunkZ = chunkPos.z
                 )
                 RegionWanderingGoalManager.attachIfConfigured(entity)
-                logger.debug("[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$entryKey")
+                RegionsConfig.debugLog(logger, "[CSR-SPAWN] Tagged & tracked UUID=${entity.uuid} region=$regionId entry=$entryKey")
             }
 
             // ── 9. Flying setup if spawned 2+ blocks above solid ground ──────
@@ -271,16 +271,17 @@ object RegionSpawnHelper {
             // by the FLYING behaviour flag. The pose alone is only visual.
             if (isFlyingPosition(world, spawnPos) && entity.canFly()) {
                 entity.setFlying(true)
-                logger.debug(
-                    "[CSR-SPAWN] Flying spawn — Cobblemon flying flag set " +
+                RegionsConfig.debugLog(
+                    logger,
+                    "[CSR-SPAWN] Flying spawn: Cobblemon flying flag set " +
                             "for '${pokemon.species.name}' @ $spawnPos"
                 )
             }
 
             entity
         } else {
-            logger.warn("[CSR-SPAWN] FAIL — world.spawnEntity returned false for '${pokemon.species.name}' @ $spawnPos")
-            logger.warn("[CSR-SPAWN] Entity type: ${entity.type}  UUID: ${entity.uuid}  removed=${entity.isRemoved}")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] FAIL: world.spawnEntity returned false for '${pokemon.species.name}' @ $spawnPos")
+            RegionsConfig.debugWarn(logger, "[CSR-SPAWN] Entity type: ${entity.type}  UUID: ${entity.uuid}  removed=${entity.isRemoved}")
             null
         }
     }
@@ -451,14 +452,14 @@ object RegionSpawnHelper {
             "DAY"   -> if (timeOfDay !in 0..12000) return "Not daytime"
             "NIGHT" -> if (timeOfDay in 0..12000) return "Not nighttime"
             "ALL"   -> {}
-            else    -> logger.warn("Invalid spawn time '${entry.spawnSettings.spawnTime}' for ${entry.pokemonName}")
+            else    -> RegionsConfig.debugWarn(logger, "Invalid spawn time '${entry.spawnSettings.spawnTime}' for ${entry.pokemonName}")
         }
         when (entry.spawnSettings.spawnWeather.uppercase()) {
             "CLEAR"   -> if (world.isRaining) return "Not clear weather"
             "RAIN"    -> if (!world.isRaining || world.isThundering) return "Not raining"
             "THUNDER" -> if (!world.isThundering) return "Not thundering"
             "ALL"     -> {}
-            else      -> logger.warn("Invalid weather '${entry.spawnSettings.spawnWeather}' for ${entry.pokemonName}")
+            else      -> RegionsConfig.debugWarn(logger, "Invalid weather '${entry.spawnSettings.spawnWeather}' for ${entry.pokemonName}")
         }
         return null
     }
@@ -622,7 +623,7 @@ object RegionSpawnHelper {
                     sb.append(" form=${matched.formOnlyShowdownId()}")
                 }
             } else {
-                logger.warn("Form '$formName' not found for '${species.name}'. Using default form.")
+                RegionsConfig.debugWarn(logger, "Form '$formName' not found for '${species.name}'. Using default form.")
             }
         }
         return sb.toString()
@@ -656,7 +657,7 @@ object RegionSpawnHelper {
         selected.forEachIndexed { i, moveId ->
             val template = Moves.getByName(moveId.lowercase())
             if (template != null) pokemon.moveSet.setMove(i, template.create())
-            else logger.warn("Invalid move '$moveId' for '${entry.pokemonName}'")
+            else RegionsConfig.debugWarn(logger, "Invalid move '$moveId' for '${entry.pokemonName}'")
         }
     }
 

@@ -14,12 +14,14 @@ import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import org.joml.Vector4f
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
 enum class BlocklistSortMethod { ALPHABETICAL, TYPE, BLOCKED, SEARCH }
 
 object RegionSpeciesBlocklistGui {
 
+    private val logger = LoggerFactory.getLogger("RegionSpeciesBlocklistGui")
     private const val PAGE_SIZE = 45
 
     // Per-player state
@@ -185,7 +187,10 @@ object RegionSpeciesBlocklistGui {
         val item = try {
             val pokemon = PokemonProperties.parse(species.name.lowercase()).create()
             PokemonItem.from(pokemon, tint = tint)
-        } catch (_: Exception) { ItemStack(Items.BARRIER) }
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to build blocklist item for ${species.name}", e)
+            ItemStack(Items.BARRIER)
+        }
 
         item.setCustomName(
             Text.literal(species.name).formatted(if (isBlocked) Formatting.RED else Formatting.WHITE)

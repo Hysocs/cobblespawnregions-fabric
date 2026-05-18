@@ -11,6 +11,7 @@ import net.minecraft.item.Items
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
+import org.slf4j.LoggerFactory
 import java.lang.reflect.Field
 import java.util.concurrent.ConcurrentHashMap
 
@@ -23,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object RegionLabelSelectorGui {
 
+    private val logger = LoggerFactory.getLogger("RegionLabelSelectorGui")
     private const val PAGE_SIZE = 45
 
     private val playerPages = ConcurrentHashMap<ServerPlayerEntity, Int>()
@@ -58,11 +60,15 @@ object RegionLabelSelectorGui {
                     try {
                         field.isAccessible = true
                         field.get(CobblemonPokemonLabels) as? String
-                    } catch (_: Exception) { null }
+                    } catch (e: Exception) {
+                        RegionsConfig.debugError(logger, "Failed to read Cobblemon label field '${field.name}'", e)
+                        null
+                    }
                 }
                 .filter { it.isNotBlank() }
                 .sorted()
         } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to refresh Cobblemon label cache", e)
             emptyList()
         }
     }

@@ -16,8 +16,11 @@ import net.minecraft.text.Text
 import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 import org.joml.Vector4f
+import org.slf4j.LoggerFactory
 
 object RegionPokemonEntryGui {
+
+    private val logger = LoggerFactory.getLogger("RegionPokemonEntryGui")
 
     private object Slots {
         const val MON_DISPLAY = 4
@@ -212,7 +215,8 @@ object RegionPokemonEntryGui {
                 if (aspects.isNotEmpty()) "§7Aspects: §f${aspects.joinToString(", ") { it.replaceFirstChar(Char::titlecase) }}" else ""
             ).filter(String::isNotEmpty))
             item
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            RegionsConfig.debugError(logger, "Failed to build Pokemon display item for $pokemonName", e)
             filler()
         }
     }
