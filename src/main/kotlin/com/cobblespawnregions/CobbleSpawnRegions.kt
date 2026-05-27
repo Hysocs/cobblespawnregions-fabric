@@ -12,6 +12,7 @@ import com.cobblespawnregions.utils.RegionWanderingGoalManager
 import com.cobblespawnregions.utils.RegionsConfig
 import com.cobblespawnregions.utils.SpawnPointScanner
 import com.cobblespawnregions.utils.SpawnPointStore
+import com.everlastingutils.command.CommandManager
 import com.everlastingutils.scheduling.SchedulerManager
 import com.everlastingutils.utils.logDebug
 import net.fabricmc.api.ModInitializer
@@ -387,6 +388,7 @@ object CobbleSpawnRegions : ModInitializer {
             if (world.isClient || hand != Hand.MAIN_HAND) return@register ActionResult.PASS
             if (player !is ServerPlayerEntity) return@register ActionResult.PASS
             val mode = getStickMode(player) ?: return@register ActionResult.PASS
+            if (!hasClaimStickPermission(player)) return@register ActionResult.SUCCESS
 
             val sel = freshOrExisting(player.uuid, mode)
 
@@ -416,6 +418,7 @@ object CobbleSpawnRegions : ModInitializer {
             if (world.isClient || hand != Hand.MAIN_HAND) return@register ActionResult.PASS
             if (player !is ServerPlayerEntity) return@register ActionResult.PASS
             val mode = getStickMode(player) ?: return@register ActionResult.PASS
+            if (!hasClaimStickPermission(player)) return@register ActionResult.SUCCESS
 
             val pos = hitResult.blockPos
             val sel = freshOrExisting(player.uuid, mode)
@@ -441,6 +444,15 @@ object CobbleSpawnRegions : ModInitializer {
             sendStatus(player, sel)
             ActionResult.SUCCESS
         }
+    }
+
+    private fun hasClaimStickPermission(player: ServerPlayerEntity): Boolean {
+        val permission = RegionsConfig.commandPermission("claimstick.use")
+        val allowed = CommandManager.hasPermissionOrOp(player.commandSource, permission, 2, 2)
+        if (!allowed) {
+            player.sendMessage(Text.literal("§c[CSR] §fYou do not have permission to use the claim stick."), false)
+        }
+        return allowed
     }
 
     fun requestParticleUpdate(uuid: UUID) {

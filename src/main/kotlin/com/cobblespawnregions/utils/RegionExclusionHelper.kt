@@ -2,6 +2,7 @@ package com.cobblespawnregions.utils
 
 import com.cobblemon.mod.common.pokemon.Pokemon
 import net.minecraft.util.math.BlockPos
+import java.util.Locale
 
 object RegionExclusionHelper {
 
@@ -73,14 +74,50 @@ object RegionExclusionHelper {
         // No conditions? Done.
         if (config.exclusionConditions.isEmpty()) return false
 
-        // 3. RAW substring match across all extracted strings
-        val extractedStrings = PokemonConditionExtractor.extractAllConditions(pokemon)
+        // 3. RAW substring match across the same searchable condition text used by the GUI.
+        val searchText = buildConditionSearchText(pokemon)
 
         return config.exclusionConditions.any { condition ->
-            condition is String && extractedStrings.any { extracted ->
-                extracted.contains(condition, ignoreCase = true)
-            }
+            condition is String && searchText.contains(condition.trim().lowercase(Locale.getDefault()))
         }
+    }
+
+    private fun buildConditionSearchText(pokemon: Pokemon): String {
+        val extractedStrings = PokemonConditionExtractor.extractAllConditions(pokemon)
+        val propertyMap = PokemonConditionExtractor.buildPropertyMap(pokemon)
+        val terms = mutableListOf<String>()
+
+        fun addTerm(term: String?) {
+            if (term.isNullOrBlank()) return
+            terms.add(term)
+            if ('=' in term) terms.add(term.replace('=', ':'))
+            if (':' in term) terms.add(term.replace(':', '='))
+        }
+
+        addTerm(pokemon.species.resourceIdentifier.toString())
+        addTerm(pokemon.species.name)
+        addTerm("species=${pokemon.species.resourceIdentifier}")
+        addTerm("pokemon=${pokemon.species.resourceIdentifier}")
+        addTerm("pokemon=${pokemon.species.name}")
+        addTerm("form=${pokemon.form.name}")
+        if (pokemon.form.name.equals("standard", ignoreCase = true)) {
+            addTerm("form=normal")
+        }
+        pokemon.form.aspects.forEach { addTerm("form=$it") }
+        pokemon.form.aspects.forEach { addTerm("aspect=$it") }
+        pokemon.aspects.forEach { addTerm("aspect=$it") }
+        pokemon.form.labels.forEach { addTerm(it) }
+        pokemon.form.labels.forEach { addTerm("label=$it") }
+        pokemon.form.types.forEach { addTerm("type=${it.name}") }
+
+        propertyMap.forEach { (key, value) ->
+            addTerm(key)
+            addTerm(value)
+            addTerm("$key=$value")
+        }
+        extractedStrings.forEach(::addTerm)
+
+        return terms.joinToString("\n").lowercase(Locale.getDefault())
     }
 
 }

@@ -4,6 +4,7 @@ import com.cobblemon.mod.common.api.moves.Moves
 import com.cobblemon.mod.common.api.pokemon.PokemonSpecies
 import com.cobblemon.mod.common.item.PokeBallItem
 import com.cobblespawnregions.gui.RegionPokemonEntryGui
+import com.cobblespawnregions.gui.refreshGuiSlots
 import com.cobblespawnregions.utils.EVSettings
 import com.cobblespawnregions.utils.IVSettings
 import com.cobblespawnregions.utils.LeveledMove
@@ -152,7 +153,7 @@ object RegionPokemonSettingsGui {
                 val button = chanceButtons.getValue(ctx.slotIndex)
                 val delta = if (ctx.clickType == ClickType.LEFT) button.left else button.right
                 update(target) { it.spawnChance = (it.spawnChance + delta).coerceIn(0.0, 100.0) }
-                refresh(player, target, ::spawnLayout)
+                refreshSlots(player, target, ::spawnLayout, 13)
             }
             in levelButtons -> {
                 val (isMin, baseDelta) = levelButtons.getValue(ctx.slotIndex)
@@ -161,13 +162,13 @@ object RegionPokemonSettingsGui {
                     if (isMin) it.minLevel = (it.minLevel + delta).coerceIn(1, it.maxLevel)
                     else it.maxLevel = (it.maxLevel + delta).coerceIn(it.minLevel, 100)
                 }
-                refresh(player, target, ::spawnLayout)
+                refreshSlots(player, target, ::spawnLayout, if (isMin) 20 else 24)
             }
             31 -> {
                 update(target) {
                     it.spawnChanceType = if (it.spawnChanceType == SpawnChanceType.COMPETITIVE) SpawnChanceType.INDEPENDENT else SpawnChanceType.COMPETITIVE
                 }
-                refresh(player, target, ::spawnLayout)
+                refreshSlots(player, target, ::spawnLayout, 31)
             }
             49 -> back(player, target)
         }
@@ -224,7 +225,10 @@ object RegionPokemonSettingsGui {
 
     private fun handleIvs(ctx: InteractionContext, player: ServerPlayerEntity, target: Target) {
         when (val slot = ctx.slotIndex) {
-            31 -> update(target) { it.ivSettings.allowCustomIvs = !it.ivSettings.allowCustomIvs }
+            31 -> {
+                update(target) { it.ivSettings.allowCustomIvs = !it.ivSettings.allowCustomIvs }
+                return refreshSlots(player, target, ::ivLayout, 31)
+            }
             49 -> return back(player, target)
             in ivSlotMap -> {
                 val stat = ivSlotMap.getValue(slot)
@@ -235,9 +239,9 @@ object RegionPokemonSettingsGui {
                     if (isMin) stat.minSet(ivs, (stat.minGet(ivs) + delta).coerceIn(0, stat.maxGet(ivs)))
                     else stat.maxSet(ivs, (stat.maxGet(ivs) + delta).coerceIn(stat.minGet(ivs), 31))
                 }
+                return refreshSlots(player, target, ::ivLayout, slot)
             }
         }
-        refresh(player, target, ::ivLayout)
     }
 
     private fun ivLayout(entry: PokemonSpawnEntry): List<ItemStack> {
@@ -263,7 +267,10 @@ object RegionPokemonSettingsGui {
 
     private fun handleEvs(ctx: InteractionContext, player: ServerPlayerEntity, target: Target) {
         when (val slot = ctx.slotIndex) {
-            31 -> update(target) { it.evSettings.allowCustomEvsOnDefeat = !it.evSettings.allowCustomEvsOnDefeat }
+            31 -> {
+                update(target) { it.evSettings.allowCustomEvsOnDefeat = !it.evSettings.allowCustomEvsOnDefeat }
+                return refreshSlots(player, target, ::evLayout, 31)
+            }
             49 -> return back(player, target)
             in evStats -> {
                 val stat = evStats.getValue(slot)
@@ -272,9 +279,9 @@ object RegionPokemonSettingsGui {
                     val evs = it.evSettings
                     stat.set(evs, (stat.get(evs) + delta).coerceIn(0, 252))
                 }
+                return refreshSlots(player, target, ::evLayout, slot)
             }
         }
-        refresh(player, target, ::evLayout)
     }
 
     private fun evLayout(entry: PokemonSpawnEntry): List<ItemStack> {
@@ -301,7 +308,10 @@ object RegionPokemonSettingsGui {
 
     private fun handleSize(ctx: InteractionContext, player: ServerPlayerEntity, target: Target) {
         when (val slot = ctx.slotIndex) {
-            40 -> update(target) { it.sizeSettings.allowCustomSize = !it.sizeSettings.allowCustomSize }
+            40 -> {
+                update(target) { it.sizeSettings.allowCustomSize = !it.sizeSettings.allowCustomSize }
+                return refreshSlots(player, target, ::sizeLayout, 40)
+            }
             49 -> return back(player, target)
             in sizeAdjustments -> {
                 val adjustment = sizeAdjustments.getValue(slot)
@@ -317,9 +327,9 @@ object RegionPokemonSettingsGui {
                     val rounded = (next * 100).roundToInt() / 100f
                     if (isMin) size.minSize = rounded else size.maxSize = rounded
                 }
+                return refreshSlots(player, target, ::sizeLayout, if (isMin) 13 else 22)
             }
         }
-        refresh(player, target, ::sizeLayout)
     }
 
     private fun sizeLayout(entry: PokemonSpawnEntry): List<ItemStack> {
@@ -346,13 +356,13 @@ object RegionPokemonSettingsGui {
         when (ctx.slotIndex) {
             21 -> {
                 update(target) { it.captureSettings.isCatchable = !it.captureSettings.isCatchable }
-                refresh(player, target, ::captureLayout)
+                refreshSlots(player, target, ::captureLayout, 21)
             }
             23 -> {
                 if (ctx.clickType == ClickType.RIGHT) openCaptureBalls(player, target)
                 else {
                     update(target) { it.captureSettings.restrictCaptureToLimitedBalls = !it.captureSettings.restrictCaptureToLimitedBalls }
-                    refresh(player, target, ::captureLayout)
+                    refreshSlots(player, target, ::captureLayout, 23)
                 }
             }
             49 -> back(player, target)
@@ -417,7 +427,7 @@ object RegionPokemonSettingsGui {
             24 -> cycle(target, timeCycle) { it.spawnSettings.spawnTime = next(it.spawnSettings.spawnTime, timeCycle) }
             49 -> return back(player, target)
         }
-        refresh(player, target, ::otherLayout)
+        refreshSlots(player, target, ::otherLayout, ctx.slotIndex)
     }
 
     private fun otherLayout(entry: PokemonSpawnEntry): List<ItemStack> {
@@ -596,6 +606,17 @@ object RegionPokemonSettingsGui {
     private fun refresh(player: ServerPlayerEntity, target: Target, layout: (PokemonSpawnEntry) -> List<ItemStack>) {
         val entry = getEntry(player, target) ?: return
         CustomGui.refreshGui(player, layout(entry))
+    }
+
+    private fun refreshSlots(
+        player: ServerPlayerEntity,
+        target: Target,
+        layout: (PokemonSpawnEntry) -> List<ItemStack>,
+        vararg slots: Int
+    ) {
+        val entry = getEntry(player, target) ?: return
+        val items = layout(entry)
+        player.refreshGuiSlots(*slots.map { it to items[it] }.toTypedArray())
     }
 
     private fun back(player: ServerPlayerEntity, target: Target) {

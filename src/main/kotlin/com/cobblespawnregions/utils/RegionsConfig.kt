@@ -129,7 +129,7 @@ data class PokemonSpawnEntry(
 // ── Region data classes ───────────────────────────────────────────────────────
 
 data class RegionData(
-    override val version: String = "1.0.1",
+    override val version: String = "1.0.2",
     override val configId: String = "cobblespawnregions",
     val regionId: String = "",
     var regionName: String = "unnamed_region",
@@ -155,7 +155,7 @@ data class RegionData(
 ) : ConfigData
 
 data class RegionsMainConfig(
-    override val version: String = "1.0.1",
+    override val version: String = "1.0.2",
     override val configId: String = "cobblespawnregions",
     var debugEnabled: Boolean = false,
     var showUnimplementedPokemonInGui: Boolean = false,
@@ -168,6 +168,7 @@ data class RegionsMainConfig(
 fun defaultCommandPermissions(): Map<String, String> = linkedMapOf(
     "csr" to "cobblespawnregions.command.csr",
     "giveclaimstick" to "cobblespawnregions.command.giveclaimstick",
+    "claimstick.use" to "cobblespawnregions.claimstick.use",
     "create" to "cobblespawnregions.command.create",
     "list" to "cobblespawnregions.command.list",
     "delete" to "cobblespawnregions.command.delete",
@@ -209,7 +210,7 @@ object RegionsConfig {
 
     private val logger = LoggerFactory.getLogger("RegionsConfig")
     private const val MOD_ID = "cobblespawnregions"
-    private const val CURRENT_VERSION = "1.0.1"
+    private const val CURRENT_VERSION = "1.0.2"
 
     private val modConfigDir = File("config/cobblespawnregions")
     private val regionsDir = File(modConfigDir, "regions")
@@ -260,6 +261,7 @@ object RegionsConfig {
         )
 
         updateDebugState()
+        ensureDefaultPermissions()
         runBlocking { loadRegionsFromDisk() }
         isInitialized = true
         debugLog(logger, "RegionsConfig initialized: ${regionFileMap.size} region(s) loaded.")
@@ -273,6 +275,7 @@ object RegionsConfig {
             }
         }
         updateDebugState()
+        ensureDefaultPermissions()
     }
 
     fun saveConfigBlocking() {
@@ -285,6 +288,18 @@ object RegionsConfig {
         config.commandPermissions.getOrPut(key) {
             defaultCommandPermissions()[key] ?: "cobblespawnregions.command.${key.replace('.', '-')}"
         }
+
+    private fun ensureDefaultPermissions() {
+        val permissions = config.commandPermissions
+        var changed = false
+        defaultCommandPermissions().forEach { (key, permission) ->
+            if (!permissions.containsKey(key)) {
+                permissions[key] = permission
+                changed = true
+            }
+        }
+        if (changed) saveConfigBlocking()
+    }
 
     fun debugLog(logger: Logger, message: String) {
         if (config.debugEnabled) logger.info(message)

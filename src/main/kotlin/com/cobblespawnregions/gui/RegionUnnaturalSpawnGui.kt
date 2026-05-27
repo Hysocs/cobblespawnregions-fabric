@@ -92,6 +92,19 @@ object RegionUnnaturalSpawnGui {
         CustomGui.refreshGui(player, buildLayout(regionId))
     }
 
+    private fun refreshSlot(player: ServerPlayerEntity, regionId: String, slot: Int) {
+        val region = RegionsConfig.getRegion(regionId) ?: return
+        val item = when (slot) {
+            Slots.TIMER -> timerItem(region.spawnTimerTicks)
+            Slots.AMOUNT -> amountItem(region.spawnAmountPerSpawn)
+            Slots.MAX_TOTAL -> maxTotalItem(region.maxTotalSpawns)
+            Slots.REQUIRE_PLAYER -> requirePlayerItem(region.requirePlayerInRange)
+            Slots.PLAYER_RANGE -> playerRangeItem(region.playerActivationRange)
+            else -> return
+        }
+        player.refreshGuiSlots(slot to item)
+    }
+
     private fun adjustTimer(player: ServerPlayerEntity, regionId: String, clickType: ClickType) {
         val delta = when (clickType) {
             ClickType.RIGHT -> -20L
@@ -100,7 +113,7 @@ object RegionUnnaturalSpawnGui {
         RegionsConfig.updateRegion(regionId) {
             it.spawnTimerTicks = (it.spawnTimerTicks + delta).coerceIn(Limits.MIN_TICKS, Limits.MAX_TICKS)
         }
-        refresh(player, regionId)
+        refreshSlot(player, regionId, Slots.TIMER)
     }
 
     private fun adjustMaxTotal(player: ServerPlayerEntity, regionId: String, clickType: ClickType) {
@@ -111,7 +124,7 @@ object RegionUnnaturalSpawnGui {
         RegionsConfig.updateRegion(regionId) {
             it.maxTotalSpawns = (it.maxTotalSpawns + delta).coerceIn(Limits.MIN_TOTAL, Limits.MAX_TOTAL)
         }
-        refresh(player, regionId)
+        refreshSlot(player, regionId, Slots.MAX_TOTAL)
     }
 
     private fun adjustAmount(player: ServerPlayerEntity, regionId: String, clickType: ClickType) {
@@ -119,14 +132,14 @@ object RegionUnnaturalSpawnGui {
         RegionsConfig.updateRegion(regionId) {
             it.spawnAmountPerSpawn = (it.spawnAmountPerSpawn + delta).coerceIn(Limits.MIN_AMOUNT, Limits.MAX_AMOUNT)
         }
-        refresh(player, regionId)
+        refreshSlot(player, regionId, Slots.AMOUNT)
     }
 
     private fun toggleRequirePlayer(player: ServerPlayerEntity, regionId: String) {
         RegionsConfig.updateRegion(regionId) {
             it.requirePlayerInRange = !it.requirePlayerInRange
         }
-        refresh(player, regionId)
+        refreshSlot(player, regionId, Slots.REQUIRE_PLAYER)
     }
 
     private fun adjustPlayerRange(player: ServerPlayerEntity, regionId: String, clickType: ClickType) {
@@ -134,7 +147,7 @@ object RegionUnnaturalSpawnGui {
         RegionsConfig.updateRegion(regionId) {
             it.playerActivationRange = (it.playerActivationRange + delta).coerceIn(Limits.MIN_RANGE, Limits.MAX_RANGE)
         }
-        refresh(player, regionId)
+        refreshSlot(player, regionId, Slots.PLAYER_RANGE)
     }
 
     private fun pokemonItem(count: Int) = CustomGui.createPlayerHeadButton(

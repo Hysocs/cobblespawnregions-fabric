@@ -86,7 +86,10 @@ object RegionEditorGui {
 
     private fun refresh(player: ServerPlayerEntity, regionId: String) {
         val region = RegionsConfig.getRegion(regionId) ?: return
-        CustomGui.refreshGui(player, buildLayout(region))
+        player.refreshGuiSlots(
+            Slots.SUMMARY to summaryItem(region),
+            Slots.PRIORITY to priorityItem(region)
+        )
     }
 
     private fun adjustPriority(player: ServerPlayerEntity, regionId: String, delta: Int) {
