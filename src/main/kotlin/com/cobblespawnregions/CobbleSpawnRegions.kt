@@ -89,8 +89,8 @@ object CobbleSpawnRegions : ModInitializer {
             serverReady = true
             SpawnPointScanner.enqueueAllLoadedChunks(server)
 
-            // ── Rebuild entity tracker from already-loaded entities ────────────
-            // Covers entities that were alive before this server session started.
+
+
             for (region in RegionsConfig.allRegions()) {
                 val rWorld = server.getWorld(parseDimension(region.dimension)) ?: continue
                 val box    = RegionSpawnHelper.regionBoundingBox(region)
@@ -181,7 +181,7 @@ object CobbleSpawnRegions : ModInitializer {
 
                 SpawnPointScanner.enqueueScan(region.regionId, region, chunkPos, world)
 
-                // Re-populate tracker with entities returning from hibernation
+
                 val box = RegionSpawnHelper.regionBoundingBox(region)
                 RegionEntityTracker.rebuildFromWorld(world, region.regionId, box)
                 world.server.execute {
@@ -196,9 +196,9 @@ object CobbleSpawnRegions : ModInitializer {
             RegionEntityTracker.markChunkUnloading(world, chunk.pos)
         }
 
-        // ── Entity removal listener ────────────────────────────────────────────
-        // Untrack our Pokémon when they are genuinely removed (killed, despawned,
-        // changed dimension) — but NOT when their chunk is merely unloaded.
+
+
+
         ServerEntityEvents.ENTITY_LOAD.register { entity, _ ->
             if (entity is PokemonEntity && RegionEntityTracker.isManaged(entity)) {
                 RegionEntityTracker.trackLoadedEntity(entity)
@@ -212,8 +212,8 @@ object CobbleSpawnRegions : ModInitializer {
             val reason = entity.removalReason
             if (chunkIsUnloading) {
                 RegionEntityTracker.forgetLiveUuid(entity.uuid)
-                // The entity is being saved with its chunk. Keep its spawn id
-                // counted so distant parts of a large region cannot refill.
+
+
                 return@register
             }
             if (reason == null) return@register
@@ -221,10 +221,10 @@ object CobbleSpawnRegions : ModInitializer {
                 Entity.RemovalReason.UNLOADED_TO_CHUNK,
                 Entity.RemovalReason.UNLOADED_WITH_PLAYER -> {
                     RegionEntityTracker.forgetLiveUuid(entity.uuid)
-                    // Entity is hibernating, not dead — leave it in the tracker.
+
                 }
                 else -> {
-                    // KILLED, DISCARDED, CHANGED_DIMENSION, etc.
+
                     val wasTracked = RegionEntityTracker.isManaged(entity)
                     RegionEntityTracker.untrack(entity.uuid)
                     if (wasTracked) {
@@ -240,7 +240,7 @@ object CobbleSpawnRegions : ModInitializer {
         registerInteractionEvents()
     }
 
-    // ── Spawn driver ──────────────────────────────────────────────────────────
+
 
     private fun processAllRegionSpawns(server: MinecraftServer) {
         val now = System.currentTimeMillis()
@@ -380,7 +380,7 @@ object CobbleSpawnRegions : ModInitializer {
         return key
     }
 
-    // ── Stick interactions ───────────────────────────────────────────────────
+
 
     private fun registerInteractionEvents() {
 

@@ -43,16 +43,16 @@ loom {
 }
 
 dependencies {
-    // To change the versions see the gradle.properties file
+
     minecraft("com.mojang:minecraft:${providers.gradleProperty("minecraft_version").get()}")
     mappings("net.fabricmc:yarn:${providers.gradleProperty("yarn_mappings").get()}:v2")
     modImplementation("net.fabricmc:fabric-loader:${providers.gradleProperty("loader_version").get()}")
 
-    // Fabric API and Kotlin
+
     modImplementation("net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty("fabric_api_version").get()}")
     modImplementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
 
-    // Your added dependencies
+
     modImplementation("com.cobblemon:fabric:1.7.3+1.21.1")
     modCompileOnly(files("libs/everlastingutils-1.1.6.jar"))
 }
@@ -96,6 +96,6 @@ publishing {
         }
     }
     repositories {
-        // Add repositories to publish to here if needed.
+
     }
 }

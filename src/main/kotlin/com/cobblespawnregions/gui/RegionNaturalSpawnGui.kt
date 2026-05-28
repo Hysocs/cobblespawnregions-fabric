@@ -11,9 +11,9 @@ import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 
-/**
- * Natural spawn restrictions for a priority region.
- */
+
+
+
 object RegionNaturalSpawnGui {
 
     private object Slots {

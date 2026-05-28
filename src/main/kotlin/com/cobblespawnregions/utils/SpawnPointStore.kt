@@ -8,24 +8,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 enum class SpawnType { SOLID, AIR, WATER }
 
-/**
- * Transient helper used only during scanning to pass data to [SpawnPointStore].
- * Never held in permanent storage — the store converts to primitive arrays immediately.
- */
+
+
+
+
 data class SpawnFloor(val pos: BlockPos, val floorBlock: Block, val type: SpawnType)
 
 object SpawnPointStore {
 
-    /**
-     * Compact primitive storage for one region's spawn floors.
-     *
-     * Per-entry cost: 8 + 4 + 1 = 13 bytes (vs ~48 bytes for a SpawnFloor object).
-     * At 100k entries: ~1.3 MB vs ~5-10 MB with object storage.
-     *
-     *   positions  — BlockPos.asLong()
-     *   blockIds   — Registries.BLOCK.getRawId(block)
-     *   types      — SpawnType.ordinal as Byte
-     */
+
+
+
+
+
+
+
+
+
+
     private class RegionFloors {
         var positions: LongArray  = LongArray(0)
         var blockIds:  IntArray   = IntArray(0)
@@ -56,7 +56,7 @@ object SpawnPointStore {
     private val regionFloors  = ConcurrentHashMap<String, RegionFloors>()
     private val scannedChunks = ConcurrentHashMap<String, MutableSet<Long>>()
 
-    // ── Read ──────────────────────────────────────────────────────────────────
+
 
     fun isChunkScanned(regionId: String, chunkX: Int, chunkZ: Int): Boolean =
         scannedChunks[regionId]?.contains(ChunkPos.toLong(chunkX, chunkZ)) == true
@@ -78,10 +78,10 @@ object SpawnPointStore {
         return true
     }
 
-    /**
-     * Iterate all floors for a region without allocating any objects.
-     * [block] is decoded from the registry on each call — cache it if needed.
-     */
+
+
+
+
     fun forEach(regionId: String, action: (pos: BlockPos, block: Block, type: SpawnType) -> Unit) {
         val data = regionFloors[regionId] ?: return
         for (i in 0 until data.size) {
@@ -104,14 +104,14 @@ object SpawnPointStore {
         }
     }
 
-    // ── Write ─────────────────────────────────────────────────────────────────
+
 
     fun addChunkFloors(regionId: String, chunkX: Int, chunkZ: Int, floors: List<SpawnFloor>) {
         regionFloors.getOrPut(regionId) { RegionFloors() }.append(floors)
         scannedChunks.getOrPut(regionId) { mutableSetOf() }.add(ChunkPos.toLong(chunkX, chunkZ))
     }
 
-    // ── Invalidation ──────────────────────────────────────────────────────────
+
 
     fun clearRegion(regionId: String) {
         regionFloors.remove(regionId)

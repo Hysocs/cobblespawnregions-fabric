@@ -12,10 +12,10 @@ import net.minecraft.text.Text
 import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 
-/**
- * Top-level editor for one priority region.
- * Detailed natural and custom-spawn settings live in their own screens.
- */
+
+
+
+
 object RegionEditorGui {
 
     private object Slots {

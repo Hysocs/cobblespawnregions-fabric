@@ -13,42 +13,42 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.util.Identifier
 
-/**
- * Spawn-blocks picker for a single [PokemonSpawnEntry].
- *
- * Special wildcard tokens (stored as strings in allowedBlocks):
- *   "#solid"  — any non-air, non-water block
- *   "#water"  — minecraft:water
- *   "#air"    — any air block
- *
- * Default set (set in RegionsConfig.createDefaultPokemonEntry):
- *   ["#solid", "#water", "#air"]  — spawns anywhere
- *
- * Mechanics (mirrors LootPoolSelectionGui drag-and-drop pattern):
- *   • Content slots (0–44) are EMPTY so the player's cursor item passes through.
- *   • Drag a block item into any empty content slot → adds its block ID.
- *   • Left-click a filled slot with an empty hand → removes that entry.
- *   • Bottom buttons add the three wildcard tokens.
- *
- * Layout (54 slots):
- *   Slots  0–44 : drag-and-drop block grid   (ItemStack.EMPTY when vacant)
- *   Slot  45    : info / hint button
- *   Slot  46    : Add Solid button
- *   Slot  47    : Add Air button
- *   Slot  48    : Add Water button
- *   Slot  49    : Back → RegionPokemonEntryGui
- *   Slots 50–53 : black glass filler
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object RegionSpawnBlocksGui {
 
-    private const val CONTENT_SIZE     = 45   // slots 0–44
+    private const val CONTENT_SIZE     = 45
     private const val INFO_SLOT        = 45
     private const val ADD_SOLID_SLOT   = 46
     private const val ADD_AIR_SLOT     = 47
     private const val ADD_WATER_SLOT   = 48
     private const val BACK_SLOT        = 49
 
-    // Wildcard token constants — must match RegionSpawnHelper
+
     const val TOKEN_SOLID = "#solid"
     const val TOKEN_WATER = "#water"
     const val TOKEN_AIR   = "#air"
@@ -58,7 +58,7 @@ object RegionSpawnBlocksGui {
         const val INFO = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWI1ZWU0MTlhZDljMDYwYzE2Y2I1M2IxZGNmZmFjOGJhY2EwYjJhMjI2NWIxYjZjN2U4ZTc4MGMzN2IxMDRjMCJ9fX0="
     }
 
-    // ── Open ──────────────────────────────────────────────────────────────────
+
 
     fun open(
         player: ServerPlayerEntity,
@@ -81,7 +81,7 @@ object RegionSpawnBlocksGui {
         )
     }
 
-    // ── Interaction ───────────────────────────────────────────────────────────
+
 
     private fun handleClick(
         ctx: InteractionContext,
@@ -96,16 +96,16 @@ object RegionSpawnBlocksGui {
             ADD_AIR_SLOT   -> addToken(player, regionId, pokemonName, formName, aspects, TOKEN_AIR)
             ADD_WATER_SLOT -> addToken(player, regionId, pokemonName, formName, aspects, TOKEN_WATER)
             BACK_SLOT      -> RegionPokemonEntryGui.open(player, regionId, pokemonName, formName, aspects)
-            INFO_SLOT      -> { /* read-only info */ }
+            INFO_SLOT      -> {  }
 
             in 0 until CONTENT_SIZE -> {
                 val cursor = player.currentScreenHandler.getCursorStack()
                 when {
-                    // ── Drag-and-drop: player holds a block item, slot is empty ──
+
                     !cursor.isEmpty && ctx.clickedStack.isEmpty ->
                         addBlockFromItem(player, regionId, pokemonName, formName, aspects, cursor)
 
-                    // ── Left-click filled slot with empty hand: remove entry ──
+
                     cursor.isEmpty && !ctx.clickedStack.isEmpty ->
                         removeAtIndex(player, regionId, pokemonName, formName, aspects, ctx.slotIndex)
                 }
@@ -113,7 +113,7 @@ object RegionSpawnBlocksGui {
         }
     }
 
-    // ── Block / token manipulation ────────────────────────────────────────────
+
 
     private fun addBlockFromItem(
         player: ServerPlayerEntity,
@@ -126,7 +126,7 @@ object RegionSpawnBlocksGui {
         val itemId  = Registries.ITEM.getId(cursor.item)
         val blockId = itemId.toString()
 
-        // Verify a real (non-air) block exists with this ID
+
         val block = Registries.BLOCK.get(Identifier.of(itemId.namespace, itemId.path))
         if (block == Blocks.AIR) {
             player.sendMessage(
@@ -202,7 +202,7 @@ object RegionSpawnBlocksGui {
         }
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
+
 
     private fun buildLayout(
         regionId: String,
@@ -210,8 +210,8 @@ object RegionSpawnBlocksGui {
         formName: String?,
         aspects: Set<String>
     ): List<ItemStack> {
-        // IMPORTANT: content slots (0–44) MUST be ItemStack.EMPTY so that the
-        // player's cursor item is not blocked by a glass pane.
+
+
         val layout = MutableList(54) { slot ->
             if (slot < CONTENT_SIZE) ItemStack.EMPTY else bottomFiller()
         }
@@ -219,12 +219,12 @@ object RegionSpawnBlocksGui {
         val entry  = RegionsConfig.getPokemonFromRegion(regionId, pokemonName, formName, aspects)
         val blocks = entry?.spawnSettings?.allowedBlocks ?: emptyList()
 
-        // Render each allowed block / token into the grid
+
         blocks.forEachIndexed { i, blockId ->
             if (i < CONTENT_SIZE) layout[i] = entryItem(blockId)
         }
 
-        // Bottom bar
+
         layout[INFO_SLOT]      = infoBtn(blocks.size)
         layout[ADD_SOLID_SLOT] = addSolidBtn()
         layout[ADD_AIR_SLOT]   = addAirBtn()
@@ -234,9 +234,9 @@ object RegionSpawnBlocksGui {
         return layout
     }
 
-    // ── Item builders ─────────────────────────────────────────────────────────
 
-    /** Renders a single entry (token or literal block ID) as a clickable item. */
+
+
     private fun entryItem(blockId: String): ItemStack {
         val (item, coloredName) = when (blockId) {
             TOKEN_SOLID -> ItemStack(Items.STONE)               to "§7All Solid Blocks"

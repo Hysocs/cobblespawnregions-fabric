@@ -11,13 +11,13 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Tracks every Pokemon spawned by CobbleSpawnRegions.
- *
- * Counts use csr_spawn_id, not the Minecraft entity UUID. UUIDs are only live
- * handles, so a chunk unload/reload cannot make the region forget a still
- * existing spawn or count a recreated entity twice.
- */
+
+
+
+
+
+
+
 object RegionEntityTracker {
 
     const val REGION_KEY = "csr_region"

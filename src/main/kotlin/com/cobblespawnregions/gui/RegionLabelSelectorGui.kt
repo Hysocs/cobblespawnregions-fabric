@@ -15,13 +15,13 @@ import org.slf4j.LoggerFactory
 import java.lang.reflect.Field
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Paginated label selector GUI.
- * Dynamically reads every label from [CobblemonPokemonLabels] via Java reflection,
- * so it stays up-to-date as Cobblemon adds or removes labels.
- *
- * Click a label to toggle it in [RegionRestrictionConfig.disallowedLabels].
- */
+
+
+
+
+
+
+
 object RegionLabelSelectorGui {
 
     private val logger = LoggerFactory.getLogger("RegionLabelSelectorGui")
@@ -29,29 +29,29 @@ object RegionLabelSelectorGui {
 
     private val playerPages = ConcurrentHashMap<ServerPlayerEntity, Int>()
 
-    // ── Dynamic label list ──────────────────────────────────────────────────
-    // Reflected from CobblemonPokemonLabels via Java reflection (not kotlin.reflect)
-    // because const val compiles to static final fields — kotlin.reflect can miss them.
+
+
+
 
     @Volatile
     private var cachedLabels: List<String> = emptyList()
 
-    /**
-     * Returns all known Cobblemon labels, reflected from the API object.
-     * Sorted alphabetically for consistent pagination.
-     */
+
+
+
+
     fun getAllLabels(): List<String> {
         if (cachedLabels.isEmpty()) refreshCache()
         return cachedLabels
     }
 
-    /**
-     * Re-reads every field from [CobblemonPokemonLabels] via Java reflection.
-     * Safe to call anytime — e.g., after a mod reload or config reload.
-     *
-     * Uses [Field.get] on the singleton INSTANCE so we read actual values,
-     * not just field names.
-     */
+
+
+
+
+
+
+
     fun refreshCache() {
         cachedLabels = try {
             CobblemonPokemonLabels::class.java.declaredFields
@@ -73,7 +73,7 @@ object RegionLabelSelectorGui {
         }
     }
 
-    // ── Slots & Textures ────────────────────────────────────────────────────
+
 
     private object Slots {
         const val PREV = 45
@@ -89,7 +89,7 @@ object RegionLabelSelectorGui {
         const val LABEL_OFF = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjYyZTBiMjU2Yzg1ZTY2NjFmMzk5YjVjNjE5OWZjNDVmMWYzZDJiZjI0ZTM1N2EyMzI3MWRkMzBhNjczM2E1ZiJ9fX0="
     }
 
-    // ── Open ────────────────────────────────────────────────────────────────
+
 
     fun open(player: ServerPlayerEntity, regionId: String, page: Int = 0) {
         playerPages[player] = page
@@ -104,7 +104,7 @@ object RegionLabelSelectorGui {
         )
     }
 
-    // ── Handle clicks ───────────────────────────────────────────────────────
+
 
     private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String) {
         val restr = RegionsConfig.getRestriction(regionId) ?: return
@@ -147,7 +147,7 @@ object RegionLabelSelectorGui {
         CustomGui.refreshGui(player, buildLayout(player, regionId))
     }
 
-    // ── Build layout ─────────────────────────────────────────────────────────
+
 
     private fun buildLayout(player: ServerPlayerEntity, regionId: String): List<ItemStack> {
         val layout = MutableList(54) { filler() }
@@ -165,7 +165,7 @@ object RegionLabelSelectorGui {
             layout[i - start] = labelItem(lbl, isBlocked)
         }
 
-        // Nav buttons
+
         if (page > 0)                                layout[Slots.PREV] = navBtn("Previous Page", Textures.PREV)
         if ((page + 1) * PAGE_SIZE < labels.size)    layout[Slots.NEXT] = navBtn("Next Page", Textures.NEXT)
         layout[Slots.BACK] = navBtn("Back to Spawn Settings", Textures.BACK)
@@ -173,7 +173,7 @@ object RegionLabelSelectorGui {
         return layout
     }
 
-    // ── Item builders ────────────────────────────────────────────────────────
+
 
     private fun labelItem(label: String, isExcluded: Boolean): ItemStack {
         val item = CustomGui.createPlayerHeadButton(

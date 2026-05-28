@@ -11,9 +11,9 @@ import net.minecraft.text.Text
 import net.minecraft.util.ClickType
 import net.minecraft.util.Formatting
 
-/**
- * Custom/unnatural spawn settings for a priority region.
- */
+
+
+
 object RegionUnnaturalSpawnGui {
 
     private object Slots {

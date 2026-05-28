@@ -9,16 +9,16 @@ import net.minecraft.item.Items
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 
-/**
- * Anvil search GUI for the species block-list.
- * Mirrors the pattern used by CobbleSpawners' SearchGui:
- *   Left slot  = cancel button
- *   Right slot = blocked input (glass pane)
- *   Result     = dynamic search button that confirms on click
- *
- * On confirm or cancel, returns to [RegionSpeciesBlocklistGui] for the
- * current [regionId].
- */
+
+
+
+
+
+
+
+
+
+
 object RegionSpeciesSearchGui {
 
     private object Textures {
@@ -39,7 +39,7 @@ object RegionSpeciesSearchGui {
             resultItem   = placeholderOutput(),
 
             onLeftClick  = {
-                // Cancel — return without changing the search term
+
                 goBack(player, regionId)
             },
 
@@ -59,7 +59,7 @@ object RegionSpeciesSearchGui {
             },
 
             onClose = {
-                // Guard against double-open: only navigate back if no other GUI is already open
+
                 player.server.execute {
                     if (player.currentScreenHandler !is FullyModularAnvilScreenHandler) {
                         goBack(player, regionId)
@@ -68,14 +68,14 @@ object RegionSpeciesSearchGui {
             }
         )
 
-        // Clear any leftover text from a previous search session
+
         player.server.execute {
             (player.currentScreenHandler as? FullyModularAnvilScreenHandler)?.clearTextField()
         }
         player.sendMessage(Text.literal("§7Type a Pokémon name then click the green button, or click §cX §7to cancel."), false)
     }
 
-    // ── Navigation ────────────────────────────────────────────────────────────
+
 
     private fun goBack(player: ServerPlayerEntity, regionId: String) {
         player.server.execute {
@@ -83,7 +83,7 @@ object RegionSpeciesSearchGui {
         }
     }
 
-    // ── Item builders ─────────────────────────────────────────────────────────
+
 
     private fun cancelBtn() = CustomGui.createPlayerHeadButton(
         textureName  = "CancelSearch",

@@ -22,7 +22,7 @@ import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
-// ── Serializable position ─────────────────────────────────────────────────────
+
 
 data class SerializableBlockPos(val x: Int = 0, val y: Int = 0, val z: Int = 0) {
     fun toBlockPos(): BlockPos = BlockPos(x, y, z)
@@ -31,7 +31,7 @@ data class SerializableBlockPos(val x: Int = 0, val y: Int = 0, val z: Int = 0) 
     }
 }
 
-// ── Pokémon spawn-entry data classes ──────────────────────────────────────────
+
 
 enum class SpawnChanceType { COMPETITIVE, INDEPENDENT }
 
@@ -71,15 +71,15 @@ data class EVSettings(
     var evSpecialAttack: Int = 0, var evSpecialDefense: Int = 0, var evSpeed: Int = 0
 )
 
-/**
- * Spawn-gate conditions for a single [PokemonSpawnEntry].
- *
- * - [spawnTime]    : "DAY", "NIGHT", or "ALL"
- * - [spawnWeather] : "CLEAR", "RAIN", "THUNDER", or "ALL"
- * - [allowedBlocks]: list of block identifiers (e.g. "minecraft:grass_block").
- *                    Matched against the floor block recorded by the scanner.
- *                    **Empty list means any block is allowed.**
- */
+
+
+
+
+
+
+
+
+
 data class SpawnSettings(
     var spawnTime: String = "ALL",
     var spawnWeather: String = "ALL",
@@ -126,7 +126,7 @@ data class PokemonSpawnEntry(
     var maxSpawnCount: Int = 5,
 )
 
-// ── Region data classes ───────────────────────────────────────────────────────
+
 
 data class RegionData(
     override val version: String = "1.0.2",
@@ -139,7 +139,7 @@ data class RegionData(
     val mode: String = "COORDS",
     var priority: Int = 0,
 
-    // Spawn control
+
     var spawnTimerTicks: Long = 200,
     var spawnAmountPerSpawn: Int = 1,
     var requirePlayerInRange: Boolean = false,
@@ -204,7 +204,7 @@ fun defaultCommandPermissions(): Map<String, String> = linkedMapOf(
     "region.priority" to "cobblespawnregions.command.region.priority"
 )
 
-// ── Config manager ────────────────────────────────────────────────────────────
+
 
 object RegionsConfig {
 
@@ -227,7 +227,7 @@ object RegionsConfig {
         .registerTypeAdapter(SerializableBlockPos::class.java, SerializableBlockPosAdapter())
         .create()
 
-    /** Per-region last spawn attempt timestamp (epoch ms). */
+
     val lastSpawnTicks: ConcurrentHashMap<String, Long> = ConcurrentHashMap()
 
     val config: RegionsMainConfig
@@ -241,7 +241,7 @@ object RegionsConfig {
     fun allRegions(): List<RegionData> =
         regionsInPriorityOrder()
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+
 
     fun initializeAndLoad() {
         if (isInitialized) return
@@ -314,7 +314,7 @@ object RegionsConfig {
         if (throwable == null) logger.error(message) else logger.error(message, throwable)
     }
 
-    // ── Disk I/O ──────────────────────────────────────────────────────────────
+
 
     private suspend fun loadRegionsFromDisk() {
         regionFileMap.clear()
@@ -350,7 +350,7 @@ object RegionsConfig {
         invalidateRegionCaches()
     }
 
-    // ── Region CRUD ───────────────────────────────────────────────────────────
+
 
     fun addRegion(data: RegionData): Boolean {
         if (regionFileMap.containsKey(data.regionId)) return false
@@ -425,7 +425,7 @@ object RegionsConfig {
         return region
     }
 
-    // ── Pokémon-entry CRUD (on regions) ───────────────────────────────────────
+
 
     fun addPokemonToRegion(regionId: String, entry: PokemonSpawnEntry): Boolean {
         var success = false
@@ -546,7 +546,7 @@ object RegionsConfig {
         return list
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+
 
     private fun fileNameForId(id: String) = "regions/region_$id.jsonc"
     private fun updateDebugState() = LogDebug.setDebugEnabledForMod(MOD_ID, config.debugEnabled)
@@ -628,7 +628,7 @@ object RegionsConfig {
         }
     }
 
-    // ── GUI helpers ───────────────────────────────────────────────────────────
+
 
     fun getRestriction(regionId: String): RegionRestrictionConfig? {
         val region = getRegion(regionId) ?: return null

@@ -30,7 +30,7 @@ object RegionConditionScannerGui {
 
     private object Slots {
         const val PREV      = 45
-        const val EXCLUDED  = 48   // ← NEW: left of back
+        const val EXCLUDED  = 48
         const val BACK      = 49
         const val NEXT      = 53
     }
@@ -65,7 +65,7 @@ object RegionConditionScannerGui {
                 val page = (playerPages[player] ?: 0) + 1
                 if (page * PAGE_SIZE < allSpecies.size) { playerPages[player] = page; refresh(player, regionId) }
             }
-            Slots.EXCLUDED -> // ← NEW: open excluded conditions list
+            Slots.EXCLUDED ->
                 RegionExcludedConditionsListGui.open(player, regionId)
             Slots.BACK -> RegionNaturalSpawnGui.open(player, regionId)
             in 0 until PAGE_SIZE -> scanSpecies(ctx.slotIndex, player, regionId)
@@ -108,13 +108,13 @@ object RegionConditionScannerGui {
 
         if (page > 0)                            layout[Slots.PREV]     = navBtn("Previous Page", Textures.PREV)
         if ((page + 1) * PAGE_SIZE < allSpecies.size) layout[Slots.NEXT]     = navBtn("Next Page", Textures.NEXT)
-        layout[Slots.EXCLUDED] = excludedBtn(regionId)           // ← NEW
+        layout[Slots.EXCLUDED] = excludedBtn(regionId)
         layout[Slots.BACK]     = navBtn("Back", Textures.BACK)
 
         return layout
     }
 
-    // ── Item builders ────────────────────────────────────────────────────────
+
 
     private fun speciesItem(species: Species): ItemStack {
         val item = try {
@@ -137,7 +137,7 @@ object RegionConditionScannerGui {
         return item
     }
 
-    /** Shows current count, opens the excluded list GUI */
+
     private fun excludedBtn(regionId: String): ItemStack {
         val count = RegionsConfig.getRestriction(regionId)?.exclusionConditions?.size ?: 0
         val item = ItemStack(Items.BARRIER)

@@ -9,18 +9,18 @@ import net.minecraft.item.Items
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.Text
 
-/**
- * Anvil search GUI for the region Pokémon picker.
- *
- * Mirrors the pattern of [RegionSpeciesSearchGui]:
- *   Left slot  — cancel (return to picker without searching)
- *   Right slot  — blocked pane
- *   Result slot — dynamic confirm button (updates on each keystroke)
- *
- * On confirm → calls [RegionPokemonSelectionGui.applySearch] which sets the
- * search term, flips the sort mode, invalidates the cache, and re-opens the
- * picker at page 0.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 object RegionPokemonSearchGui {
 
     private object Textures {
@@ -28,7 +28,7 @@ object RegionPokemonSearchGui {
         const val SEARCH = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTY4M2RjN2JjNmRiZGI1ZGM0MzFmYmUyOGRjNGI5YWU2MjViOWU1MzE3YTI5ZjJjNGVjZmU3YmY1YWU1NmMzOCJ9fX0="
     }
 
-    // ── Open ──────────────────────────────────────────────────────────────────
+
 
     fun open(player: ServerPlayerEntity, regionId: String) {
         val guiId = "csr_pokemon_search_$regionId"
@@ -43,7 +43,7 @@ object RegionPokemonSearchGui {
             resultItem   = placeholderResult(),
 
             onLeftClick  = {
-                // Cancel — go back without changing the search term
+
                 goBack(player, regionId)
             },
 
@@ -52,7 +52,7 @@ object RegionPokemonSearchGui {
             onResultClick = { context ->
                 val text = context.handler.currentText.trim()
                 if (text.isNotBlank()) {
-                    // Delegates sort/cache reset + open back to the picker
+
                     RegionPokemonSelectionGui.applySearch(player, text, regionId)
                 } else {
                     goBack(player, regionId)
@@ -68,7 +68,7 @@ object RegionPokemonSearchGui {
             },
 
             onClose = {
-                // Only navigate back if nothing else opened on top
+
                 player.server.execute {
                     if (player.currentScreenHandler !is FullyModularAnvilScreenHandler) {
                         goBack(player, regionId)
@@ -77,7 +77,7 @@ object RegionPokemonSearchGui {
             }
         )
 
-        // Clear any text carried over from a previous search session
+
         player.server.execute {
             (player.currentScreenHandler as? FullyModularAnvilScreenHandler)?.clearTextField()
         }
@@ -88,7 +88,7 @@ object RegionPokemonSearchGui {
         )
     }
 
-    // ── Navigation ────────────────────────────────────────────────────────────
+
 
     private fun goBack(player: ServerPlayerEntity, regionId: String) {
         player.server.execute {
@@ -96,7 +96,7 @@ object RegionPokemonSearchGui {
         }
     }
 
-    // ── Item builders ─────────────────────────────────────────────────────────
+
 
     private fun cancelBtn() = CustomGui.createPlayerHeadButton(
         textureName  = "CancelSearch",

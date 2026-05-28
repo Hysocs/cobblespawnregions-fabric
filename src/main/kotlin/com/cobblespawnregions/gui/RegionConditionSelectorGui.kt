@@ -62,7 +62,7 @@ object RegionConditionSelectorGui {
     private fun toggleCondition(player: ServerPlayerEntity, regionId: String, condition: String) {
         val restr = RegionsConfig.getRestriction(regionId) ?: return
 
-        // TARGET: exclusionConditions instead of disallowedSpecies
+
         if (restr.exclusionConditions.contains(condition)) {
             restr.exclusionConditions.remove(condition)
         } else {
@@ -82,7 +82,7 @@ object RegionConditionSelectorGui {
         val conditions = playerConditions[player] ?: return layout
         val page = playerPages[player] ?: 0
 
-        // CHECK AGAINST: exclusionConditions
+
         val blocked = RegionsConfig.getRestriction(regionId)?.exclusionConditions ?: emptySet<String>()
 
         val start = page * PAGE_SIZE

@@ -12,12 +12,12 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Paginated list of currently-excluded conditions.
- * Click any entry to REMOVE it from [RegionRestrictionConfig.exclusionConditions].
- *
- * Opens from the Condition Scanner GUI's "Excluded Conditions" button.
- */
+
+
+
+
+
+
 object RegionExcludedConditionsListGui {
 
     private const val PAGE_SIZE = 45
@@ -69,7 +69,7 @@ object RegionExcludedConditionsListGui {
                 val idx = page * PAGE_SIZE + ctx.slotIndex
                 if (idx < conditions.size) {
                     val condition = conditions[idx]
-                    if (condition is String) {                                    // ← FIX: safe cast
+                    if (condition is String) {
                         removeCondition(restr, regionId, condition, player)
                     }
                 }
@@ -104,12 +104,12 @@ object RegionExcludedConditionsListGui {
 
         for (i in start until end) {
             val raw = conditions[i]
-            if (raw is String) {                                                // ← FIX: safe cast
+            if (raw is String) {
                 layout[i - start] = conditionEntry(raw)
             }
         }
 
-        // Nav buttons...
+
         if (page > 0)                                layout[Slots.PREV] = navBtn("Previous Page", Textures.PREV)
         if ((page + 1) * PAGE_SIZE < conditions.size) layout[Slots.NEXT] = navBtn("Next Page", Textures.NEXT)
         layout[Slots.BACK] = navBtn("Back to Scanner", Textures.BACK)
@@ -117,9 +117,9 @@ object RegionExcludedConditionsListGui {
         return layout
     }
 
-    // ── Item builders ────────────────────────────────────────────────────────
 
-    /** Red-tinted head with enchant glint — shows it's actively blocking something */
+
+
     private fun conditionEntry(condition: String): ItemStack {
         val item = CustomGui.createPlayerHeadButton(
             "exc_$condition",

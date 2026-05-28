@@ -24,12 +24,12 @@ object RegionSpeciesBlocklistGui {
     private val logger = LoggerFactory.getLogger("RegionSpeciesBlocklistGui")
     private const val PAGE_SIZE = 45
 
-    // Per-player state
+
     private val playerPages       = ConcurrentHashMap<ServerPlayerEntity, Int>()
     private val playerSortMethods = ConcurrentHashMap<ServerPlayerEntity, BlocklistSortMethod>()
     private val playerSearchTerms = ConcurrentHashMap<ServerPlayerEntity, String>()
 
-    // Sorted once at startup — filtering/reordering happens on top of this
+
     private val allSpecies: List<Species> by lazy {
         PokemonSpecies.species.filter { it.implemented }.sortedBy { it.name }
     }
@@ -48,7 +48,7 @@ object RegionSpeciesBlocklistGui {
         const val BACK   = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
     }
 
-    // ── Public API ────────────────────────────────────────────────────────────
+
 
     fun open(player: ServerPlayerEntity, regionId: String, page: Int = 0) {
         playerPages[player] = page
@@ -67,14 +67,14 @@ object RegionSpeciesBlocklistGui {
         )
     }
 
-    /** Called by [RegionSpeciesSearchGui] after the player confirms a search term. */
+
     fun applySearch(player: ServerPlayerEntity, term: String) {
         playerSearchTerms[player] = term.trim()
         playerSortMethods[player] = BlocklistSortMethod.SEARCH
         playerPages[player] = 0
     }
 
-    // ── Interaction ───────────────────────────────────────────────────────────
+
 
     private fun handleClick(
         ctx: InteractionContext,
@@ -92,7 +92,7 @@ object RegionSpeciesBlocklistGui {
                 if (page * PAGE_SIZE < total) { playerPages[player] = page; refresh(player, regionId) }
             }
             Slots.SORT -> when (ctx.button) {
-                // Left-click: cycle sort method
+
                 0 -> {
                     val next = when (playerSortMethods.getOrDefault(player, BlocklistSortMethod.ALPHABETICAL)) {
                         BlocklistSortMethod.ALPHABETICAL -> BlocklistSortMethod.TYPE
@@ -105,7 +105,7 @@ object RegionSpeciesBlocklistGui {
                     playerPages[player] = 0
                     refresh(player, regionId)
                 }
-                // Right-click: open search
+
                 1 -> RegionSpeciesSearchGui.open(player, regionId)
             }
             Slots.BACK -> RegionNaturalSpawnGui.open(player, regionId)
@@ -134,7 +134,7 @@ object RegionSpeciesBlocklistGui {
         CustomGui.refreshGui(player, buildLayout(player, regionId))
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
+
 
     private fun buildLayout(player: ServerPlayerEntity, regionId: String): List<ItemStack> {
         val layout  = MutableList(54) { filler() }
@@ -159,7 +159,7 @@ object RegionSpeciesBlocklistGui {
         return layout
     }
 
-    // ── Species list computation ──────────────────────────────────────────────
+
 
     private fun getSpeciesForPlayer(
         player: ServerPlayerEntity,
@@ -180,7 +180,7 @@ object RegionSpeciesBlocklistGui {
         }
     }
 
-    // ── Item builders ─────────────────────────────────────────────────────────
+
 
     private fun speciesItem(species: Species, isBlocked: Boolean): ItemStack {
         val tint = if (isBlocked) Vector4f(1f, 1f, 1f, 1f) else Vector4f(0.4f, 0.4f, 0.4f, 1f)

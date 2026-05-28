@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 object RegionParticleUtils {
 
-    // ── Region outline ─────────────────────────────────────────────────────────
+
 
     data class BoxRequest(
         val minX: Double, val minY: Double, val minZ: Double,
@@ -65,7 +65,7 @@ object RegionParticleUtils {
         RegionVisualPalette(Blocks.GREEN_STAINED_GLASS.defaultState, Blocks.GREEN_CONCRETE.defaultState, Blocks.GREEN_CONCRETE.defaultState)
     )
 
-    // ── Main update loop ───────────────────────────────────────────────────────
+
 
     fun updateParticles(server: MinecraftServer) {
         val playersToCheck = HashSet<UUID>()
@@ -129,7 +129,7 @@ object RegionParticleUtils {
             }
         }
 
-        // Clean up region-outline states for players with no active visualization
+
         val it = activeVisualStates.iterator()
         while (it.hasNext()) {
             val entry = it.next()
@@ -158,7 +158,7 @@ object RegionParticleUtils {
         spawnParticleLastSentAt.keys.removeIf { it.startsWith(prefix) }
     }
 
-    // ── Region outline rendering ───────────────────────────────────────────────
+
 
     private fun updatePlayerVisuals(player: ServerPlayerEntity, requests: List<BoxRequest>) {
         val state = activeVisualStates.getOrPut(player.uuid) { PlayerVisualState() }
@@ -223,16 +223,16 @@ object RegionParticleUtils {
         entity.startInterpolation = 0
     }
 
-    // ── Spawn point particles ──────────────────────────────────────────────────
 
-    /**
-     * Sends particles for every nearby spawn floor.
-     * [SpawnFloor.pos] is always the feet position for all types.
-     *
-     *   SOLID → HAPPY_VILLAGER (green)  – two stacked to mark the column
-     *   AIR   → END_ROD (white)         – single at the air block
-     *   WATER → BUBBLE (blue)           – single at the water block
-     */
+
+
+
+
+
+
+
+
+
     private fun spawnPointParticles(player: ServerPlayerEntity, regionId: String) {
         val now = System.currentTimeMillis()
         val stateKey = "${player.uuid}:$regionId"
@@ -266,7 +266,7 @@ object RegionParticleUtils {
         )
     }
 
-    // ── Box builders ───────────────────────────────────────────────────────────
+
 
     private fun drawHollowBox(
         minX: Double, minY: Double, minZ: Double,
@@ -328,7 +328,7 @@ object RegionParticleUtils {
         requests.add(BoxRequest(maxX - t, minY - t, maxZ - t, maxX + t, maxY + t, maxZ + t, edgeState))
     }
 
-    // ── Request builders ───────────────────────────────────────────────────────
+
 
     private fun buildSelectionRequests(
         player: ServerPlayerEntity,

@@ -13,10 +13,10 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 object SpawnPointScanner {
 
-    private const val SPARSE_STEP    = 4   // X/Z stride for air/water columns
-    private const val MAX_FLOOR_DEPTH = 25  // max blocks below air/water to find solid
+    private const val SPARSE_STEP    = 4
+    private const val MAX_FLOOR_DEPTH = 25
 
-    // ── Scan queue ────────────────────────────────────────────────────────────
+
 
     private data class ScanJob(
         val regionId: String,
@@ -27,23 +27,23 @@ object SpawnPointScanner {
 
     private val scanQueue = ConcurrentLinkedQueue<ScanJob>()
 
-    /**
-     * Add a chunk to the scan queue. Called from CHUNK_LOAD and rescan helpers.
-     * Duplicate enqueues are harmless — [scanChunkForRegion] is guarded by
-     * [SpawnPointStore.isChunkScanned] and silently no-ops if already done.
-     */
+
+
+
+
+
     fun enqueueScan(regionId: String, region: RegionData, chunkPos: ChunkPos, world: ServerWorld) {
         scanQueue.add(ScanJob(regionId, region, chunkPos, world))
     }
 
-    /**
-     * Drain up to [count] jobs from the queue. Call this from END_SERVER_TICK
-     * to spread scanning across many ticks and never block the main thread.
-     */
+
+
+
+
     fun processPendingScans(count: Int = 2) {
         repeat(count) {
             val job = scanQueue.poll() ?: return
-            // Skip if already scanned (e.g. enqueued twice) or chunk unloaded.
+
             if (SpawnPointStore.isChunkScanned(job.regionId, job.chunkPos.x, job.chunkPos.z)) return@repeat
             if (!job.world.isChunkLoaded(job.chunkPos.x, job.chunkPos.z)) return@repeat
             scanChunkForRegion(job.regionId, job.region, job.chunkPos, job.world)
@@ -52,12 +52,12 @@ object SpawnPointScanner {
 
     fun clearQueue() = scanQueue.clear()
 
-    // ── On-demand helpers ─────────────────────────────────────────────────────
 
-    /**
-     * Enqueue all currently-loaded chunks that overlap [region].
-     * Call after [SpawnPointStore.clearRegion] (region create, reload).
-     */
+
+
+
+
+
     fun enqueueLoadedChunks(regionId: String, region: RegionData, server: MinecraftServer) {
         val worldKey = RegistryKey.of(
             RegistryKeys.WORLD,
@@ -79,20 +79,20 @@ object SpawnPointScanner {
         }
     }
 
-    /** Enqueue loaded chunks for every region. Call after [SpawnPointStore.clearAll]. */
+
     fun enqueueAllLoadedChunks(server: MinecraftServer) {
         RegionsConfig.allRegions().forEach { region ->
             enqueueLoadedChunks(region.regionId, region, server)
         }
     }
 
-    // ── Core scan ─────────────────────────────────────────────────────────────
 
-    /**
-     * Scans the intersection of [region] and [chunkPos], appending results to
-     * [SpawnPointStore]. Must be called on the main server thread with the chunk
-     * guaranteed loaded (enforced by [processPendingScans]).
-     */
+
+
+
+
+
+
     fun scanChunkForRegion(regionId: String, region: RegionData, chunkPos: ChunkPos, world: ServerWorld) {
         if (SpawnPointStore.isChunkScanned(regionId, chunkPos.x, chunkPos.z)) return
 
@@ -117,14 +117,14 @@ object SpawnPointScanner {
 
         val floors = mutableListOf<SpawnFloor>()
 
-        // ── SOLID surface spawns ──────────────────────────────────────────────
-        // Uses the heightmap instead of a Y loop — 1 read per column vs 320.
-        // For fixed Y ranges, falls back to a top-down scan within that range.
+
+
+
         for (x in minX..maxX) {
             for (z in minZ..maxZ) {
                 val feetY = if (useHeightmap) {
-                    // getTopY returns the Y of the first non-blocking block above
-                    // the highest blocking block — i.e. the feet position directly.
+
+
                     world.getTopY(Heightmap.Type.MOTION_BLOCKING, x, z)
                 } else {
                     topSolidInRange(world, x, z, fixedMinY, fixedMaxY)
@@ -149,8 +149,8 @@ object SpawnPointScanner {
             }
         }
 
-        // ── AIR spawns ────────────────────────────────────────────────────────
-        // Sparse X/Z. Any air block with solid ≤ MAX_FLOOR_DEPTH below.
+
+
         for (x in minX..maxX step SPARSE_STEP) {
             for (z in minZ..maxZ step SPARSE_STEP) {
                 val (scanMin, scanMax) = yBounds(world, useHeightmap, fixedMinY, fixedMaxY, x, z)
@@ -163,8 +163,8 @@ object SpawnPointScanner {
             }
         }
 
-        // ── WATER spawns ──────────────────────────────────────────────────────
-        // Sparse X/Z. Any water block with solid ≤ MAX_FLOOR_DEPTH below.
+
+
         for (x in minX..maxX step SPARSE_STEP) {
             for (z in minZ..maxZ step SPARSE_STEP) {
                 val (scanMin, scanMax) = yBounds(world, useHeightmap, fixedMinY, fixedMaxY, x, z)
@@ -181,9 +181,9 @@ object SpawnPointScanner {
         SpawnPointStore.addChunkFloors(regionId, chunkPos.x, chunkPos.z, floors)
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
 
-    /** Y bounds for a single column, using heightmap or fixed range. */
+
+
     private fun yBounds(
         world: ServerWorld,
         useHeightmap: Boolean,
@@ -195,10 +195,10 @@ object SpawnPointScanner {
         Pair(fixedMin, fixedMax)
     }
 
-    /**
-     * Scans downward from [maxY] to find the first Y where the block below is
-     * solid and the block at Y is air. Returns the feet Y, or null if not found.
-     */
+
+
+
+
     private fun topSolidInRange(world: ServerWorld, x: Int, z: Int, minY: Int, maxY: Int): Int? {
         for (y in maxY downTo minY + 1) {
             val floorState = world.getBlockState(BlockPos(x, y - 1, z))
@@ -208,7 +208,7 @@ object SpawnPointScanner {
         return null
     }
 
-    /** Returns the block type of the first solid found within [MAX_FLOOR_DEPTH] below [startY]. */
+
     private fun solidWithin(
         world: ServerWorld,
         x: Int, startY: Int, z: Int,

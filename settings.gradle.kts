@@ -13,5 +13,5 @@ pluginManagement {
 	}
 }
 
-// Should match your modid
+
 rootProject.name = "cobblespawnregions"

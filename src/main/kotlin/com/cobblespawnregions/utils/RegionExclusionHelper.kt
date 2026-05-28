@@ -6,7 +6,7 @@ import java.util.Locale
 
 object RegionExclusionHelper {
 
-    // ── Region lookup ─────────────────────────────────────────────────────────
+
 
     fun getApplicableRestriction(pos: BlockPos, dimension: String): RegionRestrictionConfig? {
         return RegionsConfig.controllingRegionAt(pos, dimension)?.spawnRestrictions
@@ -17,64 +17,64 @@ object RegionExclusionHelper {
         return config.disableAll
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // MIDDLEMAN — fast path for mixins / spawn checks
-    // ════════════════════════════════════════════════════════════════════════
 
-    /**
-     * Entry point for mixins and runtime spawn filtering.
-     *
-     * Short-circuits immediately if the position isn't inside any region,
-     * so the expensive [isPokemonExcluded] check only runs for Pokémon
-     * that are actually standing in claimed land.
-     *
-     * Checks in order:
-     *   1. Not in any region? → allow (instant)
-     *   2. [disableAll] set? → block all spawns (unless owned + excludeOwnedPokemon)
-     *   3. Owned Pokémon + [excludeOwnedPokemon]? → allow (skip expensive extraction)
-     *   4. Species / Labels / Conditions? → run full check
-     *
-     * @return true → block the spawn, false → allow it
-     */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun shouldExcludePokemon(pokemon: Pokemon, pos: BlockPos, dimension: String): Boolean {
         val config = getApplicableRestriction(pos, dimension) ?: return false
 
-        // ── disableAll: block everything in this region ─────────────────────
+
         if (config.disableAll) {
-            // Unless excludeOwnedPokemon is ON and this Pokémon is NOT wild
+
             if (config.excludeOwnedPokemon && !pokemon.isWild()) return false
-            return true  // blocked
+            return true
         }
 
-        // ── excludeOwnedPokemon: owned mons bypass all other restrictions ───
+
         if (config.excludeOwnedPokemon && !pokemon.isWild()) return false
 
-        // ── species / labels / conditions: expensive check ──────────────────
+
         return isPokemonExcluded(pokemon, config)
     }
 
-    // ── Pokémon exclusion (species/labels/conditions only) ──────────────────
 
-    /**
-     * Core exclusion logic — expensive, only call after confirming position is in a region.
-     *
-     * GUI calls this directly (it already knows the region).
-     * Mixins should call [shouldExcludePokemon] instead (which also handles disableAll/owned).
-     */
+
+
+
+
+
+
+
     fun isPokemonExcluded(pokemon: Pokemon, config: RegionRestrictionConfig): Boolean {
 
-        // 1. Exact species block-list (cheap string compare)
+
         val speciesId = pokemon.species.resourceIdentifier.toString()
         if (speciesId in config.disallowedSpecies) return true
 
-        // 2. Label block-list (set contains check)
+
         val labels = pokemon.form.labels
         if (config.disallowedLabels.any { it in labels }) return true
 
-        // No conditions? Done.
+
         if (config.exclusionConditions.isEmpty()) return false
 
-        // 3. RAW substring match across the same searchable condition text used by the GUI.
+
         val searchText = buildConditionSearchText(pokemon)
 
         return config.exclusionConditions.any { condition ->

@@ -25,24 +25,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 enum class RegionSortMethod { ALPHABETICAL, TYPE, SELECTED, SEARCH }
 
-/**
- * Full-screen Pokémon picker for a region's unnatural spawn list.
- *
- * Left-click  → toggle a Pokémon in / out of the region's [selectedPokemon].
- * Right-click → opens the selected Pokémon's per-entry settings.
- * Sort button → left-click cycles sort method; right-click opens search anvil.
- *
- * Navigation:
- *   Slot 45 — Prev page
- *   Slot 48 — Sort / Search
- *   Slot 49 — Back to [RegionUnnaturalSpawnGui]
- *   Slot 53 — Next page
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 object RegionPokemonSelectionGui {
 
     private val logger = LoggerFactory.getLogger("RegionPokemonSelectionGui")
 
-    // ── State ─────────────────────────────────────────────────────────────────
+
 
     var sortMethod = RegionSortMethod.ALPHABETICAL
     var searchTerm = ""
@@ -50,14 +50,14 @@ object RegionPokemonSelectionGui {
     private val playerPages       = ConcurrentHashMap<ServerPlayerEntity, Int>()
     private val playerComputations = ConcurrentHashMap<ServerPlayerEntity, CompletableFuture<Void>>()
 
-    // Variant cache — invalidated on open / sort change
+
     private var cachedVariants:    List<SpeciesFormVariant>? = null
     private var cachedSortMethod:  RegionSortMethod?         = null
     private var cachedSearchTerm:  String?                   = null
     private var cachedConfigKey:   String?                   = null
     private val additionalAspectsCache = ConcurrentHashMap<String, List<Set<String>>>()
 
-    // ── Slots ─────────────────────────────────────────────────────────────────
+
 
     private object Slots {
         const val PREV = 45
@@ -66,7 +66,7 @@ object RegionPokemonSelectionGui {
         const val NEXT = 53
     }
 
-    // ── Textures ──────────────────────────────────────────────────────────────
+
 
     private object Textures {
         const val PREV = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTMzYWQ1YzIyZGIxNjQzNWRhYWQ2MTU5MGFiYTUxZDkzNzkxNDJkZDU1NmQ2YzQyMmE3MTEwY2EzYWJlYTUwIn19fQ=="
@@ -75,7 +75,7 @@ object RegionPokemonSelectionGui {
         const val BACK = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzI0MzE5MTFmNDE3OGI0ZDJiNDEzYWE3ZjVjNzhhZTQ0NDdmZTkyNDY5NDNjMzFkZjMxMTYzYzBlMDQzZTBkNiJ9fX0="
     }
 
-    // ── Constants ─────────────────────────────────────────────────────────────
+
 
     private object Constants {
         const val NORMAL_FORM   = "Normal"
@@ -84,7 +84,7 @@ object RegionPokemonSelectionGui {
         const val PAGE_SIZE     = 45
     }
 
-    // ── Variant model ─────────────────────────────────────────────────────────
+
 
     data class SpeciesFormVariant(
         val species: Species,
@@ -99,7 +99,7 @@ object RegionPokemonSelectionGui {
         }
     }
 
-    // ── Open ──────────────────────────────────────────────────────────────────
+
 
     fun open(player: ServerPlayerEntity, regionId: String, page: Int = 0) {
         invalidateCache()
@@ -118,7 +118,7 @@ object RegionPokemonSelectionGui {
         )
     }
 
-    // ── Interaction ───────────────────────────────────────────────────────────
+
 
     private fun handleClick(ctx: InteractionContext, player: ServerPlayerEntity, regionId: String) {
         val page   = playerPages[player] ?: 0
@@ -170,7 +170,7 @@ object RegionPokemonSelectionGui {
         when (ctx.clickType) {
             ClickType.LEFT  -> togglePokemon(player, regionId, species, formName, aspects)
             ClickType.RIGHT -> {
-                // Only open the entry GUI when the Pokémon is actually selected
+
                 if (RegionsConfig.getPokemonFromRegion(regionId, species.showdownId(), formName, aspects) != null) {
                     RegionPokemonEntryGui.open(player, regionId, species.showdownId(), formName, aspects)
                 }
@@ -178,7 +178,7 @@ object RegionPokemonSelectionGui {
         }
     }
 
-    // ── Toggle logic ──────────────────────────────────────────────────────────
+
 
     private fun togglePokemon(
         player: ServerPlayerEntity,
@@ -207,7 +207,7 @@ object RegionPokemonSelectionGui {
         refresh(player, regionId)
     }
 
-    // ── Refresh ───────────────────────────────────────────────────────────────
+
 
     private fun refresh(player: ServerPlayerEntity, regionId: String) {
         val page = playerPages[player] ?: 0
@@ -226,7 +226,7 @@ object RegionPokemonSelectionGui {
         playerComputations[player] = future
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
+
 
     private fun buildLayout(regionId: String, page: Int): List<ItemStack> {
         val region = RegionsConfig.getRegion(regionId) ?: return MutableList(54) { filler() }
@@ -250,7 +250,7 @@ object RegionPokemonSelectionGui {
         return layout
     }
 
-    // ── Item builders ─────────────────────────────────────────────────────────
+
 
     private fun pokemonItem(
         variant: SpeciesFormVariant,
@@ -334,7 +334,7 @@ object RegionPokemonSelectionGui {
         }
     }
 
-    // ── Variant list / cache ──────────────────────────────────────────────────
+
 
     private fun getAllVariants(selected: List<PokemonSpawnEntry>): List<SpeciesFormVariant> {
         val config = RegionsConfig.config
@@ -417,7 +417,7 @@ object RegionPokemonSelectionGui {
     private fun getTotalVariantsCount(selected: List<PokemonSpawnEntry>): Int =
         getAllVariants(selected).size
 
-    // ── Selection helpers ─────────────────────────────────────────────────────
+
 
     private fun isPokemonSelected(variant: SpeciesFormVariant, selected: List<PokemonSpawnEntry>): Boolean =
         selected.any {
@@ -439,7 +439,7 @@ object RegionPokemonSelectionGui {
                     variant.additionalAspects.map(String::lowercase).toSet()
         }
 
-    // ── Name parsing ──────────────────────────────────────────────────────────
+
 
     private fun parsePokemonName(name: String): Triple<Species, String, Set<String>>? {
         val match = Regex("(.*) \\((.*)\\)").find(name)
@@ -459,7 +459,7 @@ object RegionPokemonSelectionGui {
         return Triple(species, formName, aspects)
     }
 
-    // ── Cache control (called from search GUI) ────────────────────────────────
+
 
     fun applySearch(player: ServerPlayerEntity, term: String, regionId: String) {
         sortMethod  = RegionSortMethod.SEARCH
@@ -470,7 +470,7 @@ object RegionPokemonSelectionGui {
 
     fun invalidateCache() { cachedVariants = null }
 
-    // ── Nav / control items ───────────────────────────────────────────────────
+
 
     private fun sortBtn(): ItemStack {
         val label = if (sortMethod == RegionSortMethod.SEARCH && searchTerm.isNotBlank())

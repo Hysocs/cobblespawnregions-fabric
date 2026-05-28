@@ -13,14 +13,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Intercepts Cobblemon's PlayerSpawner before it builds a spawn zone.
- * If the player is standing inside a region whose
- * spawnRestrictions.disableAll = true, we return null — the same signal
- * the vanilla spawner uses to skip the tick entirely.
- *
- * remap = false because getZoneInput is a Cobblemon method, not a vanilla one.
- */
+
+
+
+
+
+
+
+
 @Mixin(value = PlayerSpawner.class, remap = false)
 public class RegionSpawnDisableMixin {
 

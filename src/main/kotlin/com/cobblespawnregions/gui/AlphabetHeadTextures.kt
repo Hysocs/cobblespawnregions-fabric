@@ -1,9 +1,9 @@
 package com.cobblespawnregions.gui
 
-/**
- * White letter heads from minecraft-heads.com custom heads, used to make dense
- * paginated string lists easier to scan by first letter.
- */
+
+
+
+
 object AlphabetHeadTextures {
     private val LETTERS = mapOf(
         'A' to "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGU0MTc0ODEyMTYyNmYyMmFlMTZhNGM2NjRjNzMwMWE5ZjhlYTU5MWJmNGQyOTg4ODk1NzY4MmE5ZmRhZiJ9fX0=",
