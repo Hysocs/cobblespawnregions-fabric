@@ -25,6 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 object RegionParticleUtils {
 
+    data class SpawnAvailability(
+        val ground: Int,
+        val air: Int,
+        val water: Int
+    )
+
 
 
     data class BoxRequest(
@@ -258,6 +264,47 @@ object RegionParticleUtils {
                 SpawnType.WATER -> sendParticle(player, ParticleTypes.BUBBLE,  fx, fy, fz)
             }
         }
+    }
+
+    fun showAvailableSpawns(player: ServerPlayerEntity, regionId: String): SpawnAvailability {
+        val region = RegionsConfig.getRegion(regionId) ?: return SpawnAvailability(0, 0, 0)
+        val playerX = player.x
+        val playerY = player.y
+        val playerZ = player.z
+        var groundCount = 0
+        var airCount = 0
+        var waterCount = 0
+
+        SpawnPointStore.forEach(regionId) { pos, _, type ->
+            if (!RegionsConfig.isControllingRegion(regionId, pos, region.dimension)) return@forEach
+
+            val particleX = pos.x + 0.5
+            val particleY = pos.y + 0.5
+            val particleZ = pos.z + 0.5
+            val distanceX = particleX - playerX
+            val distanceY = particleY - playerY
+            val distanceZ = particleZ - playerZ
+            if (distanceX * distanceX + distanceY * distanceY + distanceZ * distanceZ > SPAWN_PARTICLE_RADIUS_SQ) {
+                return@forEach
+            }
+
+            when (type) {
+                SpawnType.SOLID -> {
+                    groundCount++
+                    sendParticle(player, ParticleTypes.HAPPY_VILLAGER, particleX, particleY, particleZ)
+                }
+                SpawnType.AIR -> {
+                    airCount++
+                    sendParticle(player, ParticleTypes.END_ROD, particleX, particleY, particleZ)
+                }
+                SpawnType.WATER -> {
+                    waterCount++
+                    sendParticle(player, ParticleTypes.BUBBLE, particleX, particleY, particleZ)
+                }
+            }
+        }
+
+        return SpawnAvailability(groundCount, airCount, waterCount)
     }
 
     private fun sendParticle(player: ServerPlayerEntity, particle: ParticleEffect, x: Double, y: Double, z: Double) {

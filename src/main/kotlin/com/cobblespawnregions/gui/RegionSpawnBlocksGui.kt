@@ -17,30 +17,6 @@ import net.minecraft.util.ClickType
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 object RegionSpawnBlocksGui {
 
     private const val CONTENT_SIZE     = 45

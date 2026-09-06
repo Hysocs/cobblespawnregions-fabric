@@ -873,8 +873,16 @@ object RegionCommands {
         player.sendMessage(Text.literal("§7  disableAll: ${flag(restr.disableAll)}"), false)
         player.sendMessage(Text.literal("§7  excludeOwnedPokemon: ${flag(restr.excludeOwnedPokemon)}"), false)
         player.sendMessage(Text.literal("§7  blockedSpecies (${restr.disallowedSpecies.size}): §f${restr.disallowedSpecies.joinToString(", ").ifEmpty { "none" }}"), false)
+        val spawns = RegionParticleUtils.showAvailableSpawns(player, region.regionId)
+        player.sendMessage(Text.literal(
+            "§7Nearby spawns: ${spawnCount(spawns.ground, "ground")} §8| " +
+                "${spawnCount(spawns.air, "air")} §8| ${spawnCount(spawns.water, "water")}"
+        ), false)
         return 1
     }
+
+    private fun spawnCount(count: Int, label: String): String =
+        if (count > 0) "§a$count §7$label" else "§c0 §7$label"
 
     private fun worldForRegion(source: ServerCommandSource, region: RegionData): ServerWorld? {
         val id = Identifier.tryParse(region.dimension) ?: run {

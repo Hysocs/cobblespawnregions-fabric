@@ -154,7 +154,7 @@ fun createRegionPokemonDefaults() = PokemonSpawnEntry(
 
 
 data class RegionData(
-    override val version: String = "1.0.7",
+    override val version: String = "1.0.8",
     override val configId: String = "cobblespawnregions",
     val regionId: String = "",
     var regionName: String = "unnamed_region",
@@ -179,7 +179,7 @@ data class RegionData(
 ) : ConfigData
 
 data class RegionsMainConfig(
-    override val version: String = "1.0.7",
+    override val version: String = "1.0.8",
     override val configId: String = "cobblespawnregions",
     var debugEnabled: Boolean = false,
     var showUnimplementedPokemonInGui: Boolean = false,
@@ -238,7 +238,7 @@ object RegionsConfig {
 
     private val logger = LoggerFactory.getLogger("RegionsConfig")
     private const val MOD_ID = "cobblespawnregions"
-    private const val CURRENT_VERSION = "1.0.7"
+    private const val CURRENT_VERSION = "1.0.8"
 
     private val modConfigDir = File("config/cobblespawnregions")
     private val regionsDir = File(modConfigDir, "regions")

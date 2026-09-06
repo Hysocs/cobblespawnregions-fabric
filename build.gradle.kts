@@ -50,7 +50,7 @@ dependencies {
     modImplementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
 
 
-    modImplementation("com.cobblemon:fabric:1.7.3+1.21.1")
+    modImplementation("com.cobblemon:fabric:1.8.0+1.21.1")
     modCompileOnly(files("libs/everlastingutils-1.1.6.jar"))
 }
 
