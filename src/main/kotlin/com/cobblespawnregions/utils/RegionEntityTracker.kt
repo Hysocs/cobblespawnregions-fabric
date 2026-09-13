@@ -202,11 +202,11 @@ object RegionEntityTracker {
     fun isManaged(entity: PokemonEntity): Boolean =
         entity.pokemon.persistentData.getString(REGION_KEY).isNotEmpty()
 
-    /**
-     * Region tracking describes a wild spawn, not the Pokemon after it has
-     * entered a trainer's storage. Capture preserves Pokemon persistent data,
-     * so remove our metadata once Cobblemon reports a successful capture.
-     */
+
+
+
+
+
     fun clearManagedData(pokemon: Pokemon): Boolean {
         val data = pokemon.persistentData
         val regionId = data.getString(REGION_KEY)

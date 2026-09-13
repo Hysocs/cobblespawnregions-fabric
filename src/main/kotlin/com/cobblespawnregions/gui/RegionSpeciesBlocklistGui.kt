@@ -123,8 +123,8 @@ object RegionSpeciesBlocklistGui {
     }
 
     private fun toggleSpecies(slot: Int, player: ServerPlayerEntity, regionId: String, target: RestrictionTarget) {
-        // Resolve the click against the exact page snapshot that created the visible item.
-        // Search/sort state can change as inventory screens close and reopen.
+
+
         val clickedSpecies = playerVisibleSpecies[player]?.get(slot) ?: return
         val id    = clickedSpecies.resourceIdentifier.toString()
         val restr = RegionsConfig.getRestriction(regionId, target) ?: return

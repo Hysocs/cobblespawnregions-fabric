@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Dismounts a rider after the mount crosses into a position where riding is blocked. */
+
 @Mixin(RidingController.class)
 public class RidingRegionBoundaryMixin {
     @Shadow @Final private PokemonEntity entity;

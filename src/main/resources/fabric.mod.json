@@ -12,7 +12,7 @@
     },
     "license": "GNU Lesser General Public License v3",
 	"icon": "assets/cobblespawnregions/icon.png",
-	"environment": "server",
+	"environment": "*",
 	"entrypoints": {
 		"main": [
 			{

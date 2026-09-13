@@ -38,7 +38,7 @@ object PokemonConditionExtractor {
 
     private val speciesConditionCache = ConcurrentHashMap<String, List<String>>()
 
-    /** Makes private Kotlin properties and Java backing fields readable when allowed. */
+
     private fun readableProperties(obj: Any): Sequence<KProperty1<out Any, *>> =
         obj::class.memberProperties.asSequence().onEach { property ->
             property.isAccessible = true
@@ -81,8 +81,8 @@ object PokemonConditionExtractor {
 
         conditionList.addAll(extractAllRaw(pokemon.form))
 
-        // These are separate in Cobblemon: autonomous flight is AI behaviour,
-        // while ridden movement is defined by the form's riding styles/seats.
+
+
         val riding = pokemon.form.riding
         val ridingStyles = riding.behaviours?.keys ?: emptySet()
         conditionList.add("canfly=${pokemon.form.behaviour.moving.fly.canFly}")
